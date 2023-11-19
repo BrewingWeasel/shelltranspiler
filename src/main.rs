@@ -2,15 +2,16 @@ use std::collections::HashMap;
 
 use chumsky::prelude::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Statement {
     Expression(Expr),
     Assignment(String, Expr),
     LocalAssignment(String, Expr),
     Function(String, Vec<Vec<String>>, Box<Vec<Statement>>),
+    Empty,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Expr {
     Num(f64),
     Str(String),
@@ -97,6 +98,10 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
 
         let assignment = ident.then_ignore(just('=')).then(expr.clone());
 
+        let comment = just::<_, _, Simple<char>>('#')
+            .then_ignore(filter(|c| *c != '\n').repeated())
+            .then_ignore(text::newline());
+
         let local_assignment = text::keyword("local")
             .padded()
             .ignore_then(assignment.clone())
@@ -119,6 +124,8 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
             .or(global_assignment)
             .or(function)
             .or(expr.map(|e| Statement::Expression(e)))
+            .or(comment.to(Statement::Empty))
+            .then_ignore(comment.or_not())
             .then_ignore(just(';').ignored().or(text::newline()).or_not())
             .padded()
     });
@@ -205,6 +212,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
             state.end_scope();
             Ok(output)
         }
+        Statement::Empty => Ok(String::new()),
     }
 }
 

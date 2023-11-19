@@ -8,7 +8,11 @@ fun print_three_times(value, other) {
   echo(value)
 }
 
-echo(global_value); echo("hi again"); echo("hi again again");
+echo(global_value); # this compiles
+# But this would not
+# echo(local_value)
+
+echo("hi again"); echo("hi again again");
 
 other_stuff = "lol"
 echo(values, other_stuff)

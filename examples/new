@@ -1,0 +1,3 @@
+if fd(".rs") {
+  echo("there is a rust file in here!") |> sed("s/rust/blazingly fast/") |> lolcat()
+}

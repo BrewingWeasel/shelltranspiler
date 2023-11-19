@@ -31,6 +31,7 @@ enum Expr {
     Str(String),
     Var(String),
     Call(String, Vec<Expr>),
+    Pipe(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, Clone)]
@@ -102,12 +103,21 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
                 )
                 .map(|(f, args)| Expr::Call(f, args));
 
-            let atom = int
-                .or(expr.delimited_by(just('('), just(')')))
-                .or(strvalue)
-                .or(call)
-                .or(var);
-            atom
+            recursive(|part| {
+                let atom = int
+                    .or(expr.delimited_by(just('('), just(')')))
+                    .or(strvalue)
+                    .or(call)
+                    .or(var);
+                atom.then(just("|>").padded().ignore_then(part).or_not())
+                    .map(|(first, into_piped)| {
+                        if let Some(second) = into_piped {
+                            Expr::Pipe(Box::new(first), Box::new(second))
+                        } else {
+                            first
+                        }
+                    })
+            })
         });
 
         let assignment = ident.then_ignore(just('=')).then(expr.clone());
@@ -196,6 +206,12 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<String, String> {
                 output.push_str(&transpile_expr(arg, state)?);
             }
             output.push(')');
+            Ok(output)
+        }
+        Expr::Pipe(first, second) => {
+            let mut output = transpile_repr(first, state)?;
+            output.push_str(" | ");
+            output.push_str(&transpile_repr(second, state)?);
             Ok(output)
         }
     }

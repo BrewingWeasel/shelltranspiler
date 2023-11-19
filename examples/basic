@@ -1,11 +1,14 @@
 values = echo("find values")
 
 fun print_three_times(value, other) {
+  local local_value = "yes"
+  global_value = "hi"
   echo(value)
   echo(value)
   echo(value)
 }
 
+echo(global_value)
 
 other_stuff = "lol"
 echo(values, other_stuff)

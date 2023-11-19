@@ -6,6 +6,7 @@ use chumsky::prelude::*;
 enum Statement {
     Expression(Expr),
     Assignment(String, Expr),
+    LocalAssignment(String, Expr),
     Function(String, Vec<Vec<String>>, Box<Vec<Statement>>),
 }
 
@@ -94,10 +95,14 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
             atom
         });
 
-        let assignment = ident
-            .then_ignore(just('='))
-            .then(expr.clone())
-            .map(|(id, val)| Statement::Assignment(id, val));
+        let assignment = ident.then_ignore(just('=')).then(expr.clone());
+
+        let local_assignment = text::keyword("local")
+            .padded()
+            .ignore_then(assignment.clone())
+            .map(|(id, val)| Statement::LocalAssignment(id, val));
+
+        let global_assignment = assignment.map(|(id, val)| Statement::Assignment(id, val));
 
         let function = text::keyword("fun")
             .ignore_then(ident)
@@ -110,7 +115,8 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
             .then_ignore(just('}'))
             .map(|((id, args), body)| Statement::Function(id, args, Box::new(body)));
 
-        assignment
+        local_assignment
+            .or(global_assignment)
             .or(function)
             .or(expr.map(|e| Statement::Expression(e)))
             .then_ignore(text::newline().or_not())
@@ -159,6 +165,19 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
         },
         Statement::Assignment(ident, value) => {
             let mut output = String::from(ident);
+            output.push('=');
+            output.push_str(&transpile_expr(value, state)?);
+            state
+                .scopes
+                .first_mut()
+                .unwrap()
+                .vars
+                .insert(ident.to_owned(), ident.to_owned());
+            Ok(output)
+        }
+        Statement::LocalAssignment(ident, value) => {
+            let mut output = String::from("local ");
+            output.push_str(&ident);
             output.push('=');
             output.push_str(&transpile_expr(value, state)?);
             state

@@ -12,6 +12,9 @@ echo(global_value); # this compiles
 # But this would not
 # echo(local_value)
 
+if true() {
+  echo("it works!")
+}
 echo("hi again"); echo("hi again again");
 
 other_stuff = "lol"

@@ -8,6 +8,7 @@ enum Statement {
     Assignment(String, Expr),
     LocalAssignment(String, Expr),
     Function(String, Vec<Vec<String>>, Box<Vec<Statement>>),
+    IfStatement(Expr, Box<Vec<Statement>>),
     Empty,
 }
 
@@ -109,6 +110,15 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
 
         let global_assignment = assignment.map(|(id, val)| Statement::Assignment(id, val));
 
+        let if_statement = text::keyword("if")
+            .padded()
+            .ignore_then(expr.clone())
+            .padded()
+            .then_ignore(just('{'))
+            .then(statement.clone().repeated())
+            .then_ignore(just('}'))
+            .map(|(cond, body)| Statement::IfStatement(cond, Box::new(body)));
+
         let function = text::keyword("fun")
             .ignore_then(ident)
             .then_ignore(just('('))
@@ -123,6 +133,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         local_assignment
             .or(global_assignment)
             .or(function)
+            .or(if_statement)
             .or(expr.map(|e| Statement::Expression(e)))
             .or(comment.to(Statement::Empty))
             .then_ignore(comment.or_not())
@@ -210,6 +221,14 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
             output.push_str(&transpile_from_ast(conts, state)?);
             output.push('}');
             state.end_scope();
+            Ok(output)
+        }
+        Statement::IfStatement(cond, conts) => {
+            let mut output = String::from("if ");
+            output.push_str(&transpile_expr(cond, state)?);
+            output.push_str("; then\n");
+            output.push_str(&transpile_from_ast(conts, state)?);
+            output.push_str("fi");
             Ok(output)
         }
         Statement::Empty => Ok(String::new()),

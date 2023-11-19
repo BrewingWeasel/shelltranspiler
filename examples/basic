@@ -1,3 +1,8 @@
 values = echo("find values")
+
+fun do_stuff() {
+  echo("lol")
+}
+
 other_stuff = "lol"
 echo(values, other_stuff)

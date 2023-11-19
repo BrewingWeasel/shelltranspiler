@@ -4,6 +4,7 @@ use chumsky::prelude::*;
 enum Statement {
     Expression(Expr),
     Assignment(String, Expr),
+    Function(String, Vec<Vec<String>>, Box<Vec<Statement>>),
 }
 
 #[derive(Debug)]
@@ -16,48 +17,62 @@ enum Expr {
 
 fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
     let ident = text::ident().padded();
-    let expr = recursive(|expr| {
-        let int = text::int(10)
-            .map(|s: String| Expr::Num(s.parse().unwrap()))
-            .padded();
 
-        let strvalue = filter::<_, _, Simple<char>>(|c: &char| *c != '"')
-            .repeated()
-            .map(|s: Vec<char>| Expr::Str(s.into_iter().collect()))
-            .delimited_by(just('"'), just('"'))
-            .padded();
+    let statement = recursive(|statement| {
+        let expr = recursive(|expr| {
+            let int = text::int(10)
+                .map(|s: String| Expr::Num(s.parse().unwrap()))
+                .padded();
 
-        let var = ident.clone().map(|s| Expr::Var(s));
+            let strvalue = filter::<_, _, Simple<char>>(|c: &char| *c != '"')
+                .repeated()
+                .map(|s: Vec<char>| Expr::Str(s.into_iter().collect()))
+                .delimited_by(just('"'), just('"'))
+                .padded();
 
-        let call = ident
-            .then(
-                expr.clone()
-                    .separated_by(just(','))
-                    .allow_trailing()
-                    .delimited_by(just('('), just(')')),
-            )
-            .map(|(f, args)| Expr::Call(f, args));
+            let var = ident.clone().map(|s| Expr::Var(s));
 
-        let atom = int
-            .or(expr.delimited_by(just('('), just(')')))
-            .or(strvalue)
-            .or(call)
-            .or(var);
-        atom
+            let call = ident
+                .then(
+                    expr.clone()
+                        .separated_by(just(','))
+                        .allow_trailing()
+                        .delimited_by(just('('), just(')')),
+                )
+                .map(|(f, args)| Expr::Call(f, args));
+
+            let atom = int
+                .or(expr.delimited_by(just('('), just(')')))
+                .or(strvalue)
+                .or(call)
+                .or(var);
+            atom
+        });
+
+        let assignment = ident
+            .then_ignore(just('='))
+            .then(expr.clone())
+            .map(|(id, val)| Statement::Assignment(id, val));
+
+        let function = text::keyword("fun")
+            .ignore_then(ident)
+            .then_ignore(just('('))
+            .then(ident.repeated().separated_by(just(',')).allow_trailing())
+            .then_ignore(just(')'))
+            .padded()
+            .then_ignore(just('{'))
+            .then(statement.repeated())
+            .then_ignore(just('}'))
+            .map(|((id, args), body)| Statement::Function(id, args, Box::new(body)));
+
+        assignment
+            .or(function)
+            .or(expr.map(|e| Statement::Expression(e)))
+            .then_ignore(text::newline().or_not())
+            .padded()
     });
 
-    let assignment = ident
-        .then_ignore(just('='))
-        .then(expr.clone())
-        .map(|(id, val)| Statement::Assignment(id, val));
-
-    let statement = assignment.or(expr.map(|e| Statement::Expression(e)));
-    let statements = statement
-        .then_ignore(text::newline().or_not())
-        .padded()
-        .repeated();
-
-    statements.then_ignore(end())
+    statement.repeated().then_ignore(end())
 }
 
 fn transpile_expr(expr: &Expr) -> Result<String, String> {
@@ -97,10 +112,18 @@ fn transpile(statement: &Statement) -> Result<String, String> {
             output.push_str(&transpile_expr(value)?);
             Ok(output)
         }
+        Statement::Function(ident, args, conts) => {
+            let mut output = String::from(ident);
+            output.push_str("() {\n");
+            output.push_str(&transpile_from_ast(conts)?);
+            output.push('}');
+            Ok(output)
+        }
     }
 }
 
 fn transpile_from_ast(conts: &Vec<Statement>) -> Result<String, String> {
+    println!("{:#?}", conts);
     let mut compiled = String::new();
     for expr in conts {
         let output = transpile(expr)?;
@@ -127,6 +150,6 @@ fn main() {
         Ok(output) => print!("{output}"),
         Err(errors) => errors
             .into_iter()
-            .for_each(|e| println!("Parse error: {}", e)),
+            .for_each(|e| eprintln!("Parse error: {}", e)),
     }
 }

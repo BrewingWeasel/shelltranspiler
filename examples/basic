@@ -8,7 +8,7 @@ fun print_three_times(value, other) {
   echo(value)
 }
 
-echo(global_value)
+echo(global_value); echo("hi again"); echo("hi again again");
 
 other_stuff = "lol"
 echo(values, other_stuff)

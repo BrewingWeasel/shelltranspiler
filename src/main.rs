@@ -119,7 +119,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
             .or(global_assignment)
             .or(function)
             .or(expr.map(|e| Statement::Expression(e)))
-            .then_ignore(text::newline().or_not())
+            .then_ignore(just(';').ignored().or(text::newline()).or_not())
             .padded()
     });
 

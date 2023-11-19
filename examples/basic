@@ -12,9 +12,14 @@ echo(global_value); # this compiles
 # But this would not
 # echo(local_value)
 
-if true() {
+if false() {
   echo("it works!")
+} else if true() {
+  echo("yes!")
+} else {
+  echo("no")
 }
+
 echo("hi again"); echo("hi again again");
 
 other_stuff = "lol"

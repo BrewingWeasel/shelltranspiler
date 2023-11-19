@@ -8,8 +8,21 @@ enum Statement {
     Assignment(String, Expr),
     LocalAssignment(String, Expr),
     Function(String, Vec<Vec<String>>, Box<Vec<Statement>>),
-    IfStatement(Expr, Box<Vec<Statement>>),
+    IfStatement(IfStatement),
     Empty,
+}
+
+#[derive(Debug, Clone)]
+struct IfStatement {
+    cond: Expr,
+    statements: Box<Vec<Statement>>,
+    continue_if: Box<Option<ContinueIfStatement>>,
+}
+
+#[derive(Debug, Clone)]
+enum ContinueIfStatement {
+    If(IfStatement),
+    Else(Box<Vec<Statement>>),
 }
 
 #[derive(Debug, Clone)]
@@ -110,14 +123,32 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
 
         let global_assignment = assignment.map(|(id, val)| Statement::Assignment(id, val));
 
-        let if_statement = text::keyword("if")
-            .padded()
-            .ignore_then(expr.clone())
-            .padded()
-            .then_ignore(just('{'))
-            .then(statement.clone().repeated())
-            .then_ignore(just('}'))
-            .map(|(cond, body)| Statement::IfStatement(cond, Box::new(body)));
+        let if_statement = recursive(|if_statement| {
+            text::keyword("if")
+                .padded()
+                .ignore_then(expr.clone())
+                .padded()
+                .then_ignore(just('{'))
+                .then(statement.clone().repeated())
+                .then_ignore(just('}'))
+                .then(
+                    text::keyword("else").padded().then(
+                        if_statement
+                            .map(|next_if| ContinueIfStatement::If(next_if))
+                            .or(just('{')
+                                .ignore_then(statement.clone().repeated())
+                                .then_ignore(just('}'))
+                                .map(|body| ContinueIfStatement::Else(Box::new(body))))
+                            .or_not(),
+                    ),
+                )
+                .map(|((cond, body), (_, to_continue))| IfStatement {
+                    cond,
+                    statements: Box::new(body),
+                    continue_if: Box::new(to_continue),
+                })
+        })
+        .map(|if_statement| Statement::IfStatement(if_statement));
 
         let function = text::keyword("fun")
             .ignore_then(ident)
@@ -223,16 +254,36 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
             state.end_scope();
             Ok(output)
         }
-        Statement::IfStatement(cond, conts) => {
-            let mut output = String::from("if ");
-            output.push_str(&transpile_expr(cond, state)?);
-            output.push_str("; then\n");
-            output.push_str(&transpile_from_ast(conts, state)?);
-            output.push_str("fi");
-            Ok(output)
-        }
+        Statement::IfStatement(if_statement) => transpile_if(if_statement, state, true),
         Statement::Empty => Ok(String::new()),
     }
+}
+
+fn transpile_if(
+    if_statement: &IfStatement,
+    state: &mut State,
+    ends_if: bool,
+) -> Result<String, String> {
+    let mut output = String::from("if ");
+    output.push_str(&transpile_expr(&if_statement.cond, state)?);
+    output.push_str("; then\n");
+    output.push_str(&transpile_from_ast(&if_statement.statements, state)?);
+    if let Some(to_continue) = if_statement.continue_if.as_ref() {
+        match to_continue {
+            ContinueIfStatement::Else(statements) => {
+                output.push_str("else \n");
+                output.push_str(&transpile_from_ast(statements, state)?);
+            }
+            ContinueIfStatement::If(if_statement) => {
+                output.push_str("el");
+                output.push_str(&transpile_if(&if_statement, state, false)?)
+            }
+        }
+    }
+    if ends_if {
+        output.push_str("fi");
+    }
+    Ok(output)
 }
 
 fn transpile_from_ast(conts: &Vec<Statement>, state: &mut State) -> Result<String, String> {

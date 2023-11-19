@@ -1,0 +1,3 @@
+values = echo("find values")
+other_stuff = "lol"
+echo(values, other_stuff)

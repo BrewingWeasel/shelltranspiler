@@ -132,20 +132,22 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
                 .then(statement.clone().repeated())
                 .then_ignore(just('}'))
                 .then(
-                    text::keyword("else").padded().then(
-                        if_statement
-                            .map(|next_if| ContinueIfStatement::If(next_if))
-                            .or(just('{')
-                                .ignore_then(statement.clone().repeated())
-                                .then_ignore(just('}'))
-                                .map(|body| ContinueIfStatement::Else(Box::new(body))))
-                            .or_not(),
-                    ),
+                    text::keyword("else")
+                        .padded()
+                        .then(
+                            if_statement
+                                .map(|next_if| ContinueIfStatement::If(next_if))
+                                .or(just('{')
+                                    .ignore_then(statement.clone().repeated())
+                                    .then_ignore(just('}'))
+                                    .map(|body| ContinueIfStatement::Else(Box::new(body)))),
+                        )
+                        .or_not(),
                 )
-                .map(|((cond, body), (_, to_continue))| IfStatement {
+                .map(|((cond, body), to_continue)| IfStatement {
                     cond,
                     statements: Box::new(body),
-                    continue_if: Box::new(to_continue),
+                    continue_if: Box::new(to_continue.map(|(_, v)| v)),
                 })
         })
         .map(|if_statement| Statement::IfStatement(if_statement));

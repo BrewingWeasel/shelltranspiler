@@ -200,20 +200,23 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<String, String> {
         }
     }
 }
+fn transpile_repr(expr: &Expr, state: &mut State) -> Result<String, String> {
+    match expr {
+        Expr::Call(f, args) => {
+            let mut output = String::from(f);
+            for arg in args {
+                output.push(' ');
+                output.push_str(&transpile_expr(arg, state)?);
+            }
+            Ok(output)
+        }
+        other => transpile_expr(other, state),
+    }
+}
 
 fn transpile(statement: &Statement, state: &mut State) -> Result<String, String> {
     match statement {
-        Statement::Expression(expr) => match expr {
-            Expr::Call(f, args) => {
-                let mut output = String::from(f);
-                for arg in args {
-                    output.push(' ');
-                    output.push_str(&transpile_expr(arg, state)?);
-                }
-                Ok(output)
-            }
-            other => transpile_expr(other, state),
-        },
+        Statement::Expression(expr) => transpile_repr(expr, state),
         Statement::Assignment(ident, value) => {
             let mut output = String::from(ident);
             output.push('=');
@@ -267,7 +270,7 @@ fn transpile_if(
     ends_if: bool,
 ) -> Result<String, String> {
     let mut output = String::from("if ");
-    output.push_str(&transpile_expr(&if_statement.cond, state)?);
+    output.push_str(&transpile_repr(&if_statement.cond, state)?);
     output.push_str("; then\n");
     output.push_str(&transpile_from_ast(&if_statement.statements, state)?);
     if let Some(to_continue) = if_statement.continue_if.as_ref() {

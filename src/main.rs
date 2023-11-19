@@ -209,13 +209,16 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<String, String> {
             Ok(output)
         }
         Expr::Pipe(first, second) => {
-            let mut output = transpile_repr(first, state)?;
+            let mut output = String::from("$(");
+            output.push_str(&transpile_repr(first, state)?);
             output.push_str(" | ");
             output.push_str(&transpile_repr(second, state)?);
+            output.push(')');
             Ok(output)
         }
     }
 }
+
 fn transpile_repr(expr: &Expr, state: &mut State) -> Result<String, String> {
     match expr {
         Expr::Call(f, args) => {
@@ -224,6 +227,12 @@ fn transpile_repr(expr: &Expr, state: &mut State) -> Result<String, String> {
                 output.push(' ');
                 output.push_str(&transpile_expr(arg, state)?);
             }
+            Ok(output)
+        }
+        Expr::Pipe(first, second) => {
+            let mut output = transpile_repr(first, state)?;
+            output.push_str(" | ");
+            output.push_str(&transpile_repr(second, state)?);
             Ok(output)
         }
         other => transpile_expr(other, state),

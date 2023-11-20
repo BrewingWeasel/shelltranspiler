@@ -9,14 +9,14 @@ mod transpiler;
 #[derive(Debug, Clone)]
 enum Statement<'a> {
     Expression(Expr),
-    Assignment(String, Expr),
-    LocalAssignment(String, Expr),
+    Assignment(String, Option<Type>, Expr),
+    LocalAssignment(String, Option<Type>, Expr),
     Function(String, Vec<(String, Option<Type>)>, Vec<Statement<'a>>),
     If(IfStatement<'a>),
     Empty,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 enum Type {
     Str,
     Num,
@@ -56,10 +56,15 @@ enum Expr {
 }
 
 impl Expr {
-    fn get_type(&self) -> Type {
+    fn get_type(&self, state: &State) -> Type {
         match self {
             Self::Num(_) => Type::Num,
             Self::Str(_) => Type::Str,
+            Self::Var(v) => state
+                .get_var(v)
+                .map(|var| var.1)
+                .flatten()
+                .unwrap_or(Type::Any),
             _ => unimplemented!(),
         }
     }
@@ -85,7 +90,7 @@ impl State {
         self.scopes.pop();
     }
 
-    fn get_var(&self, variable_name: &str) -> Option<&String> {
+    fn get_var(&self, variable_name: &str) -> Option<&(String, Option<Type>)> {
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.vars.get(variable_name) {
                 return Some(real_var);
@@ -105,7 +110,7 @@ impl State {
 
 #[derive(Debug, Clone)]
 struct Scope {
-    vars: HashMap<String, String>,
+    vars: HashMap<String, (String, Option<Type>)>,
     functions: HashMap<String, Vec<(String, Option<Type>)>>,
 }
 

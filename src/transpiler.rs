@@ -5,7 +5,7 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<String, String> {
         Expr::Num(x) => Ok(format!("'{x}'")),
         Expr::Str(s) => Ok(format!("'{s}'")),
         Expr::Var(s) => {
-            if let Some(sh_variable_name) = state.get_var(s) {
+            if let Some((sh_variable_name, _type)) = state.get_var(s) {
                 Ok(format!("${sh_variable_name}"))
             } else {
                 Err(format!("Could not find variable {s}"))
@@ -40,7 +40,7 @@ fn call_function(f: &str, args: &Vec<Expr>, state: &mut State) -> Result<String,
         }
         for (arg, (arg_name, possible_arg_type)) in args.iter().zip(actual_args) {
             if let Some(arg_type) = possible_arg_type {
-                if &arg.get_type() != arg_type {
+                if &arg.get_type(state) != arg_type {
                     return Err(format!(
                         "Expected {:?} to match the type of {arg_name} ({:?})",
                         arg, arg_type
@@ -72,7 +72,7 @@ fn transpile_repr(expr: &Expr, state: &mut State) -> Result<String, String> {
 fn transpile(statement: &Statement, state: &mut State) -> Result<String, String> {
     match statement {
         Statement::Expression(expr) => transpile_repr(expr, state),
-        Statement::Assignment(ident, value) => {
+        Statement::Assignment(ident, var_type, value) => {
             let mut output = String::from(ident);
             output.push('=');
             output.push_str(&transpile_expr(value, state)?);
@@ -81,10 +81,10 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
                 .first_mut()
                 .unwrap()
                 .vars
-                .insert(ident.to_owned(), ident.to_owned());
+                .insert(ident.to_owned(), (ident.to_owned(), *var_type));
             Ok(output)
         }
-        Statement::LocalAssignment(ident, value) => {
+        Statement::LocalAssignment(ident, var_type, value) => {
             let mut output = String::from("local ");
             output.push_str(ident);
             output.push('=');
@@ -94,7 +94,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
                 .last_mut()
                 .unwrap()
                 .vars
-                .insert(ident.to_owned(), ident.to_owned());
+                .insert(ident.to_owned(), (ident.to_owned(), *var_type));
             Ok(output)
         }
         Statement::Function(ident, args, conts) => {
@@ -105,13 +105,13 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
                 .functions
                 .insert(ident.to_owned(), args.to_owned());
             state.new_scope();
-            for (i, (arg, _type)) in args.iter().enumerate() {
+            for (i, (arg, arg_type)) in args.iter().enumerate() {
                 state
                     .scopes
                     .last_mut()
                     .unwrap()
                     .vars
-                    .insert(arg.to_owned(), (i + 1).to_string());
+                    .insert(arg.to_owned(), ((i + 1).to_string(), *arg_type));
             }
             println!("{:#?}", state);
             let mut output = String::from(ident);

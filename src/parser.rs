@@ -3,12 +3,16 @@ use crate::{Condition, ContinueIfStatement, Expr, IfStatement, Statement};
 use chumsky::prelude::*;
 use chumsky::Parser;
 
-fn get_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
-    choice((
-        text::keyword("string").to(Type::Str),
-        text::keyword("int").to(Type::Num),
-    ))
-    .padded()
+fn optional_type() -> impl Parser<char, Option<Type>, Error = Simple<char>> + Clone {
+    just(':')
+        .ignore_then(
+            choice((
+                text::keyword("string").to(Type::Str),
+                text::keyword("int").to(Type::Num),
+            ))
+            .padded(),
+        )
+        .or_not()
 }
 
 fn expression() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
@@ -141,7 +145,10 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
 
     let statement = recursive(|statement| {
         let expr = expression();
-        let assignment = ident.then_ignore(just('=')).then(expr.clone());
+        let assignment = ident
+            .then(optional_type())
+            .then_ignore(just('='))
+            .then(expr.clone());
 
         let comment = just::<_, _, Simple<char>>('#')
             .then_ignore(filter(|c| *c != '\n').repeated())
@@ -150,9 +157,10 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
         let local_assignment = text::keyword("local")
             .padded()
             .ignore_then(assignment.clone())
-            .map(|(id, val)| Statement::LocalAssignment(id, val));
+            .map(|((id, var_type), val)| Statement::LocalAssignment(id, var_type, val));
 
-        let global_assignment = assignment.map(|(id, val)| Statement::Assignment(id, val));
+        let global_assignment =
+            assignment.map(|((id, var_type), val)| Statement::Assignment(id, var_type, val));
 
         let if_statement = if_statement(statement.clone());
 
@@ -161,7 +169,7 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
             .then_ignore(just('('))
             .then(
                 ident
-                    .then(just(':').ignore_then(get_type()).or_not())
+                    .then(optional_type())
                     .separated_by(just(','))
                     .allow_trailing(),
             )

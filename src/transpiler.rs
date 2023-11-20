@@ -1,4 +1,4 @@
-use crate::{Condition, ContinueIfStatement, Expr, IfStatement, State, Statement};
+use crate::{Condition, ContinueIfStatement, Expr, IfStatement, State, Statement, Type};
 
 fn transpile_expr(expr: &Expr, state: &mut State) -> Result<String, String> {
     match expr {
@@ -69,33 +69,56 @@ fn transpile_repr(expr: &Expr, state: &mut State) -> Result<String, String> {
     }
 }
 
+enum AssignmentType {
+    Local,
+    Global,
+}
+
+fn assignment(
+    ident: &str,
+    var_type: &Option<Type>,
+    value: &Expr,
+    assignment_type: AssignmentType,
+    state: &mut State,
+) -> Result<String, String> {
+    let mut output = match assignment_type {
+        AssignmentType::Local => String::from("local "),
+        AssignmentType::Global => String::new(),
+    };
+    output.push_str(ident);
+    output.push('=');
+
+    if let Some(attempted_type) = var_type {
+        let expr_type = &value.get_type(state);
+        if attempted_type != expr_type {
+            return Err(format!(
+                "Type {:?} does not match {:?}",
+                attempted_type, expr_type
+            ));
+        }
+    }
+
+    output.push_str(&transpile_expr(value, state)?);
+
+    let scope = match assignment_type {
+        AssignmentType::Local => state.scopes.last_mut(),
+        AssignmentType::Global => state.scopes.last_mut(),
+    };
+    scope
+        .unwrap()
+        .vars
+        .insert(ident.to_owned(), (ident.to_owned(), *var_type));
+    Ok(output)
+}
+
 fn transpile(statement: &Statement, state: &mut State) -> Result<String, String> {
     match statement {
         Statement::Expression(expr) => transpile_repr(expr, state),
         Statement::Assignment(ident, var_type, value) => {
-            let mut output = String::from(ident);
-            output.push('=');
-            output.push_str(&transpile_expr(value, state)?);
-            state
-                .scopes
-                .first_mut()
-                .unwrap()
-                .vars
-                .insert(ident.to_owned(), (ident.to_owned(), *var_type));
-            Ok(output)
+            assignment(ident, var_type, value, AssignmentType::Global, state)
         }
         Statement::LocalAssignment(ident, var_type, value) => {
-            let mut output = String::from("local ");
-            output.push_str(ident);
-            output.push('=');
-            output.push_str(&transpile_expr(value, state)?);
-            state
-                .scopes
-                .last_mut()
-                .unwrap()
-                .vars
-                .insert(ident.to_owned(), (ident.to_owned(), *var_type));
-            Ok(output)
+            assignment(ident, var_type, value, AssignmentType::Local, state)
         }
         Statement::Function(ident, args, conts) => {
             state

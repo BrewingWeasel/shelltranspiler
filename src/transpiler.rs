@@ -13,11 +13,7 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<String, String> {
         }
         Expr::Call(f, args) => {
             let mut output = String::from("$(");
-            output.push_str(f);
-            for arg in args {
-                output.push(' ');
-                output.push_str(&transpile_expr(arg, state)?);
-            }
+            output.push_str(&call_function(f, args, state)?);
             output.push(')');
             Ok(output)
         }
@@ -32,16 +28,27 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<String, String> {
     }
 }
 
+fn call_function(f: &str, args: &Vec<Expr>, state: &mut State) -> Result<String, String> {
+    let mut output = String::from(f);
+    if let Some(actual_args) = state.get_func(f) {
+        if args.len() != actual_args.len() {
+            return Err(format!(
+                "{f} expected {} arguments, but got {}",
+                actual_args.len(),
+                args.len()
+            ));
+        }
+    }
+    for arg in args {
+        output.push(' ');
+        output.push_str(&transpile_expr(arg, state)?);
+    }
+    Ok(output)
+}
+
 fn transpile_repr(expr: &Expr, state: &mut State) -> Result<String, String> {
     match expr {
-        Expr::Call(f, args) => {
-            let mut output = String::from(f);
-            for arg in args {
-                output.push(' ');
-                output.push_str(&transpile_expr(arg, state)?);
-            }
-            Ok(output)
-        }
+        Expr::Call(f, args) => call_function(f, args, state),
         Expr::Pipe(first, second) => {
             let mut output = transpile_repr(first, state)?;
             output.push_str(" | ");
@@ -81,8 +88,14 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
             Ok(output)
         }
         Statement::Function(ident, args, conts) => {
+            state
+                .scopes
+                .first_mut()
+                .unwrap()
+                .functions
+                .insert(ident.to_owned(), args.to_owned());
             state.new_scope();
-            for (i, arg) in args.first().unwrap().iter().enumerate() {
+            for (i, arg) in args.iter().enumerate() {
                 state
                     .scopes
                     .last_mut()
@@ -90,6 +103,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
                     .vars
                     .insert(arg.to_owned(), (i + 1).to_string());
             }
+            println!("{:#?}", state);
             let mut output = String::from(ident);
             output.push_str("() {\n");
             output.push_str(&transpile_from_ast(conts, state)?);

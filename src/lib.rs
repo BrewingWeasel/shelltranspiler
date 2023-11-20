@@ -11,7 +11,7 @@ enum Statement<'a> {
     Expression(Expr),
     Assignment(String, Expr),
     LocalAssignment(String, Expr),
-    Function(String, Vec<Vec<String>>, Vec<Statement<'a>>),
+    Function(String, Vec<String>, Vec<Statement<'a>>),
     If(IfStatement<'a>),
     Empty,
 }
@@ -76,17 +76,27 @@ impl State {
         }
         None
     }
+    fn get_func(&self, function: &str) -> Option<&Vec<String>> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(real_var) = scope.functions.get(function) {
+                return Some(real_var);
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
 struct Scope {
     vars: HashMap<String, String>,
+    functions: HashMap<String, Vec<String>>,
 }
 
 impl Scope {
     fn new() -> Self {
         Self {
             vars: HashMap::new(),
+            functions: HashMap::new(),
         }
     }
 }

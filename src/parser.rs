@@ -150,7 +150,7 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
         let function = text::keyword("fun")
             .ignore_then(ident)
             .then_ignore(just('('))
-            .then(ident.repeated().separated_by(just(',')).allow_trailing())
+            .then(ident.separated_by(just(',')).allow_trailing())
             .then_ignore(just(')'))
             .padded()
             .then_ignore(just('{'))

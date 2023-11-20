@@ -3,16 +3,16 @@ use crate::{Condition, ContinueIfStatement, Expr, IfStatement, Statement};
 use chumsky::prelude::*;
 use chumsky::Parser;
 
-fn optional_type() -> impl Parser<char, Option<Type>, Error = Simple<char>> + Clone {
-    just(':')
-        .ignore_then(
-            choice((
-                text::keyword("string").to(Type::Str),
-                text::keyword("int").to(Type::Num),
-            ))
-            .padded(),
-        )
-        .or_not()
+fn get_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
+    choice((
+        text::keyword("string").to(Type::Str),
+        text::keyword("int").to(Type::Num),
+    ))
+    .padded()
+}
+
+fn type_assignment() -> impl Parser<char, Option<Type>, Error = Simple<char>> + Clone {
+    just(':').ignore_then(get_type()).or_not()
 }
 
 fn expression() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
@@ -146,7 +146,7 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
     let statement = recursive(|statement| {
         let expr = expression();
         let assignment = ident
-            .then(optional_type())
+            .then(type_assignment())
             .then_ignore(just('='))
             .then(expr.clone());
 
@@ -169,16 +169,19 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
             .then_ignore(just('('))
             .then(
                 ident
-                    .then(optional_type())
+                    .then(type_assignment())
                     .separated_by(just(','))
                     .allow_trailing(),
             )
             .then_ignore(just(')'))
             .padded()
+            .then(just("->").padded().ignore_then(get_type()).or_not())
             .then_ignore(just('{'))
             .then(statement.repeated())
             .then_ignore(just('}'))
-            .map(|((id, args), body)| Statement::Function(id, args, body));
+            .map(|(((id, args), return_type), body)| {
+                Statement::Function(id, args, return_type, body)
+            });
 
         local_assignment
             .or(global_assignment)

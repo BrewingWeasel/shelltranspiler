@@ -30,7 +30,7 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<String, String> {
 
 fn call_function(f: &str, args: &Vec<Expr>, state: &mut State) -> Result<String, String> {
     let mut output = String::from(f);
-    if let Some(actual_args) = state.get_func(f) {
+    if let Some((actual_args, _return_type)) = state.get_func(f) {
         if args.len() != actual_args.len() {
             return Err(format!(
                 "{f} expected {} arguments, but got {}",
@@ -120,13 +120,13 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
         Statement::LocalAssignment(ident, var_type, value) => {
             assignment(ident, var_type, value, AssignmentType::Local, state)
         }
-        Statement::Function(ident, args, conts) => {
+        Statement::Function(ident, args, return_type, conts) => {
             state
                 .scopes
                 .first_mut()
                 .unwrap()
                 .functions
-                .insert(ident.to_owned(), args.to_owned());
+                .insert(ident.to_owned(), (args.to_owned(), *return_type));
             state.new_scope();
             for (i, (arg, arg_type)) in args.iter().enumerate() {
                 state
@@ -136,7 +136,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
                     .vars
                     .insert(arg.to_owned(), ((i + 1).to_string(), *arg_type));
             }
-            println!("{:#?}", state);
+
             let mut output = String::from(ident);
             output.push_str("() {\n");
             output.push_str(&transpile_from_ast(conts, state)?);

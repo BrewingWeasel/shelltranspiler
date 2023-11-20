@@ -11,7 +11,12 @@ enum Statement<'a> {
     Expression(Expr),
     Assignment(String, Option<Type>, Expr),
     LocalAssignment(String, Option<Type>, Expr),
-    Function(String, Vec<(String, Option<Type>)>, Vec<Statement<'a>>),
+    Function(
+        String,
+        Vec<(String, Option<Type>)>,
+        Option<Type>,
+        Vec<Statement<'a>>,
+    ),
     If(IfStatement<'a>),
     Empty,
 }
@@ -65,6 +70,11 @@ impl Expr {
                 .map(|var| var.1)
                 .flatten()
                 .unwrap_or(Type::Any),
+            Self::Call(func, _) => state
+                .get_func(func)
+                .map(|func| func.1)
+                .flatten()
+                .unwrap_or(Type::Any),
             _ => unimplemented!(),
         }
     }
@@ -98,7 +108,7 @@ impl State {
         }
         None
     }
-    fn get_func(&self, function: &str) -> Option<&Vec<(String, Option<Type>)>> {
+    fn get_func(&self, function: &str) -> Option<&(Vec<(String, Option<Type>)>, Option<Type>)> {
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.functions.get(function) {
                 return Some(real_var);
@@ -111,7 +121,7 @@ impl State {
 #[derive(Debug, Clone)]
 struct Scope {
     vars: HashMap<String, (String, Option<Type>)>,
-    functions: HashMap<String, Vec<(String, Option<Type>)>>,
+    functions: HashMap<String, (Vec<(String, Option<Type>)>, Option<Type>)>,
 }
 
 impl Scope {

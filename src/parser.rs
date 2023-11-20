@@ -65,10 +65,14 @@ fn conditional() -> impl Parser<char, Condition, Error = Simple<char>> + Clone {
         condition
             .clone()
             .padded()
-            .then(just("&&").ignore_then(condition).or_not())
+            .then(choice((just("||"), just("&&"))).then(condition).or_not())
             .map(|(condition1, potential_condition)| {
-                if let Some(condition2) = potential_condition {
-                    Condition::And(Box::new(condition1), Box::new(condition2))
+                if let Some((operator, condition2)) = potential_condition {
+                    if operator == "&&" {
+                        Condition::And(Box::new(condition1), Box::new(condition2))
+                    } else {
+                        Condition::Or(Box::new(condition1), Box::new(condition2))
+                    }
                 } else {
                     condition1
                 }

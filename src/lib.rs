@@ -29,6 +29,7 @@ enum Condition {
     Equal(Expr, Expr),
     Not(Box<Condition>),
     And(Box<Condition>, Box<Condition>),
+    Or(Box<Condition>, Box<Condition>),
 }
 
 #[derive(Debug, Clone)]

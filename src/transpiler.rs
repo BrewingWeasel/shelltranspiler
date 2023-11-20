@@ -124,6 +124,12 @@ fn transpile_condition(condition: &Condition, state: &mut State) -> Result<Strin
             output.push_str(&transpile_condition(cond2, state)?);
             Ok(output)
         }
+        Condition::Or(cond1, cond2) => {
+            let mut output = transpile_condition(cond1, state)?;
+            output.push_str(" || ");
+            output.push_str(&transpile_condition(cond2, state)?);
+            Ok(output)
+        }
     }
 }
 

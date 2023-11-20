@@ -23,6 +23,7 @@ struct IfStatement {
 enum Condition {
     Expression(Expr),
     Equal(Expr, Expr),
+    Not(Box<Condition>),
 }
 
 #[derive(Debug, Clone)]
@@ -139,14 +140,22 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
 
         let global_assignment = assignment.map(|(id, val)| Statement::Assignment(id, val));
 
-        let is_equal = expr
-            .clone()
-            .padded()
-            .then_ignore(just("=="))
-            .padded()
-            .then(expr.clone())
-            .map(|(val1, val2)| Condition::Equal(val1, val2));
-        let conditional = is_equal.or(expr.clone().map(|e| Condition::Expression(e)));
+        let conditional = recursive(|conditional| {
+            let not = just("not")
+                .padded()
+                .ignore_then(conditional.clone())
+                .map(|cond| Condition::Not(Box::new(cond)));
+
+            let is_equal = expr
+                .clone()
+                .padded()
+                .then_ignore(just("=="))
+                .padded()
+                .then(expr.clone())
+                .map(|(val1, val2)| Condition::Equal(val1, val2));
+
+            not.or(is_equal.or(expr.clone().map(|e| Condition::Expression(e))))
+        });
 
         let if_statement = recursive(|if_statement| {
             text::keyword("if")
@@ -313,6 +322,11 @@ fn transpile_condition(condition: &Condition, state: &mut State) -> Result<Strin
             output.push_str(" = ");
             output.push_str(&transpile_repr(expr2, state)?);
             output.push_str(" ]");
+            Ok(output)
+        }
+        Condition::Not(cond) => {
+            let mut output = String::from("not ");
+            output.push_str(&transpile_condition(cond, state)?);
             Ok(output)
         }
     }

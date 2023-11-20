@@ -1,4 +1,8 @@
 if fd(".rs") {
-  files=fd(".rs") |> sed("s#src/#rust file#") |> rev()
-  echo(files) |> lolcat()
+  files=fd(".rs") |> sed("s#src/#start/#")
+  if files == "start/main.rs" {
+    echo(files) |> lolcat()
+  } else {
+    echo("nope")
+  }
 }

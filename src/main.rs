@@ -14,9 +14,15 @@ enum Statement {
 
 #[derive(Debug, Clone)]
 struct IfStatement {
-    cond: Expr,
+    cond: Condition,
     statements: Box<Vec<Statement>>,
     continue_if: Box<Option<ContinueIfStatement>>,
+}
+
+#[derive(Debug, Clone)]
+enum Condition {
+    Expression(Expr),
+    Equal(Expr, Expr),
 }
 
 #[derive(Debug, Clone)]
@@ -133,10 +139,19 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
 
         let global_assignment = assignment.map(|(id, val)| Statement::Assignment(id, val));
 
+        let is_equal = expr
+            .clone()
+            .padded()
+            .then_ignore(just("=="))
+            .padded()
+            .then(expr.clone())
+            .map(|(val1, val2)| Condition::Equal(val1, val2));
+        let conditional = is_equal.or(expr.clone().map(|e| Condition::Expression(e)));
+
         let if_statement = recursive(|if_statement| {
             text::keyword("if")
                 .padded()
-                .ignore_then(expr.clone())
+                .ignore_then(conditional)
                 .padded()
                 .then_ignore(just('{'))
                 .then(statement.clone().repeated())
@@ -289,13 +304,27 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
     }
 }
 
+fn transpile_condition(condition: &Condition, state: &mut State) -> Result<String, String> {
+    match condition {
+        Condition::Expression(expr) => transpile_repr(expr, state),
+        Condition::Equal(expr1, expr2) => {
+            let mut output = String::from("[ ");
+            output.push_str(&transpile_repr(expr1, state)?);
+            output.push_str(" = ");
+            output.push_str(&transpile_repr(expr2, state)?);
+            output.push_str(" ]");
+            Ok(output)
+        }
+    }
+}
+
 fn transpile_if(
     if_statement: &IfStatement,
     state: &mut State,
     ends_if: bool,
 ) -> Result<String, String> {
     let mut output = String::from("if ");
-    output.push_str(&transpile_repr(&if_statement.cond, state)?);
+    output.push_str(&transpile_condition(&if_statement.cond, state)?);
     output.push_str("; then\n");
     output.push_str(&transpile_from_ast(&if_statement.statements, state)?);
     if let Some(to_continue) = if_statement.continue_if.as_ref() {

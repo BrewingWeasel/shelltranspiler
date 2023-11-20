@@ -1,4 +1,4 @@
-if fd(".rs") {
+if find(".rs") && true() {
   files=fd(".rs") |> sed("s#src/#start/#")
   if files == "start/main.rs" {
     echo(files) |> lolcat()

@@ -24,6 +24,7 @@ enum Condition {
     Expression(Expr),
     Equal(Expr, Expr),
     Not(Box<Condition>),
+    And(Box<Condition>, Box<Condition>),
 }
 
 #[derive(Debug, Clone)]
@@ -154,7 +155,21 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
                 .then(expr.clone())
                 .map(|(val1, val2)| Condition::Equal(val1, val2));
 
-            not.or(is_equal.or(expr.clone().map(|e| Condition::Expression(e))))
+            let condition = not
+                .or(is_equal)
+                .or(expr.clone().map(|e| Condition::Expression(e)));
+
+            condition
+                .clone()
+                .padded()
+                .then(just("&&").ignore_then(condition).or_not())
+                .map(|(condition1, potential_condition)| {
+                    if let Some(condition2) = potential_condition {
+                        Condition::And(Box::new(condition1), Box::new(condition2))
+                    } else {
+                        condition1
+                    }
+                })
         });
 
         let if_statement = recursive(|if_statement| {
@@ -327,6 +342,12 @@ fn transpile_condition(condition: &Condition, state: &mut State) -> Result<Strin
         Condition::Not(cond) => {
             let mut output = String::from("not ");
             output.push_str(&transpile_condition(cond, state)?);
+            Ok(output)
+        }
+        Condition::And(cond1, cond2) => {
+            let mut output = transpile_condition(cond1, state)?;
+            output.push_str(" && ");
+            output.push_str(&transpile_condition(cond2, state)?);
             Ok(output)
         }
     }

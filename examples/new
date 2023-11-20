@@ -1,3 +1,10 @@
+fun say_x_n_times(x: string, n: int) {
+  echo(x)
+  echo(n)
+}
+
+say_x_n_times("yes!", 23)
+
 if (true() || false()) && (true() || false()) {
   echo("that is very true")
 }

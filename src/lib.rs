@@ -11,9 +11,16 @@ enum Statement<'a> {
     Expression(Expr),
     Assignment(String, Expr),
     LocalAssignment(String, Expr),
-    Function(String, Vec<String>, Vec<Statement<'a>>),
+    Function(String, Vec<(String, Option<Type>)>, Vec<Statement<'a>>),
     If(IfStatement<'a>),
     Empty,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Type {
+    Str,
+    Num,
+    Any,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +55,16 @@ enum Expr {
     Pipe(Box<Expr>, Box<Expr>),
 }
 
+impl Expr {
+    fn get_type(&self) -> Type {
+        match self {
+            Self::Num(_) => Type::Num,
+            Self::Str(_) => Type::Str,
+            _ => unimplemented!(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct State {
     scopes: Vec<Scope>,
@@ -76,7 +93,7 @@ impl State {
         }
         None
     }
-    fn get_func(&self, function: &str) -> Option<&Vec<String>> {
+    fn get_func(&self, function: &str) -> Option<&Vec<(String, Option<Type>)>> {
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.functions.get(function) {
                 return Some(real_var);
@@ -89,7 +106,7 @@ impl State {
 #[derive(Debug, Clone)]
 struct Scope {
     vars: HashMap<String, String>,
-    functions: HashMap<String, Vec<String>>,
+    functions: HashMap<String, Vec<(String, Option<Type>)>>,
 }
 
 impl Scope {

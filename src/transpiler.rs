@@ -38,8 +38,18 @@ fn call_function(f: &str, args: &Vec<Expr>, state: &mut State) -> Result<String,
                 args.len()
             ));
         }
+        for (arg, (arg_name, possible_arg_type)) in args.iter().zip(actual_args) {
+            if let Some(arg_type) = possible_arg_type {
+                if &arg.get_type() != arg_type {
+                    return Err(format!(
+                        "Expected {:?} to match the type of {arg_name} ({:?})",
+                        arg, arg_type
+                    ));
+                }
+            }
+        }
     }
-    for arg in args {
+    for arg in args.iter() {
         output.push(' ');
         output.push_str(&transpile_expr(arg, state)?);
     }
@@ -95,7 +105,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
                 .functions
                 .insert(ident.to_owned(), args.to_owned());
             state.new_scope();
-            for (i, arg) in args.iter().enumerate() {
+            for (i, (arg, _type)) in args.iter().enumerate() {
                 state
                     .scopes
                     .last_mut()

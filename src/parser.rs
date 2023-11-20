@@ -1,6 +1,15 @@
+use crate::Type;
 use crate::{Condition, ContinueIfStatement, Expr, IfStatement, Statement};
 use chumsky::prelude::*;
 use chumsky::Parser;
+
+fn get_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
+    choice((
+        text::keyword("string").to(Type::Str),
+        text::keyword("int").to(Type::Num),
+    ))
+    .padded()
+}
 
 fn expression() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
     let ident = text::ident().padded();
@@ -150,7 +159,12 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
         let function = text::keyword("fun")
             .ignore_then(ident)
             .then_ignore(just('('))
-            .then(ident.separated_by(just(',')).allow_trailing())
+            .then(
+                ident
+                    .then(just(':').ignore_then(get_type()).or_not())
+                    .separated_by(just(','))
+                    .allow_trailing(),
+            )
             .then_ignore(just(')'))
             .padded()
             .then_ignore(just('{'))

@@ -105,10 +105,21 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
 fn transpile_condition(condition: &Condition, state: &mut State) -> Result<String, String> {
     match condition {
         Condition::Expression(expr) => transpile_repr(expr, state),
-        Condition::Equal(expr1, expr2) => {
+        Condition::Operator(op, expr1, expr2) => {
             let mut output = String::from("[ ");
             output.push_str(&transpile_repr(expr1, state)?);
-            output.push_str(" = ");
+            output.push(' ');
+            let shell_op = match *op {
+                "==" => "=",
+                "!=" => "!=",
+                ">=" => "-ge",
+                ">" => "-gt",
+                "<=" => "-le",
+                "<" => "-lt",
+                _ => unreachable!(),
+            };
+            output.push_str(shell_op);
+            output.push(' ');
             output.push_str(&transpile_repr(expr2, state)?);
             output.push_str(" ]");
             Ok(output)

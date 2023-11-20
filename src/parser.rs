@@ -44,7 +44,7 @@ fn expression() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
     })
 }
 
-fn conditional() -> impl Parser<char, Condition, Error = Simple<char>> + Clone {
+fn conditional<'a>() -> impl Parser<char, Condition<'a>, Error = Simple<char>> + Clone {
     let expr = expression();
     recursive(|conditional| {
         let not = just("not")
@@ -52,15 +52,25 @@ fn conditional() -> impl Parser<char, Condition, Error = Simple<char>> + Clone {
             .ignore_then(conditional.clone())
             .map(|cond| Condition::Not(Box::new(cond)));
 
-        let is_equal = expr
-            .clone()
-            .padded()
-            .then_ignore(just("=="))
-            .padded()
-            .then(expr.clone())
-            .map(|(val1, val2)| Condition::Equal(val1, val2));
+        let operator = |op| {
+            expr.clone()
+                .padded()
+                .then_ignore(just(op))
+                .padded()
+                .then(expr.clone())
+                .map(move |(val1, val2)| Condition::Operator(op, val1, val2))
+        };
 
-        let condition = not.or(is_equal).or(expr.map(Condition::Expression));
+        let condition = choice((
+            not,
+            operator("=="),
+            operator("!="),
+            operator(">="),
+            operator(">"),
+            operator("<="),
+            operator("<"),
+            expr.map(Condition::Expression),
+        ));
 
         condition
             .clone()
@@ -81,8 +91,8 @@ fn conditional() -> impl Parser<char, Condition, Error = Simple<char>> + Clone {
 }
 
 fn if_statement<'a>(
-    statement: impl Parser<char, Statement, Error = Simple<char>> + Clone + 'a,
-) -> impl Parser<char, Statement, Error = Simple<char>> + Clone + 'a {
+    statement: impl Parser<char, Statement<'a>, Error = Simple<char>> + Clone + 'a,
+) -> impl Parser<char, Statement<'a>, Error = Simple<char>> + Clone + 'a {
     recursive(|if_statement| {
         text::keyword("if")
             .padded()
@@ -111,7 +121,7 @@ fn if_statement<'a>(
     .map(Statement::If)
 }
 
-pub fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
+pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char>> {
     let ident = text::ident().padded();
 
     let statement = recursive(|statement| {

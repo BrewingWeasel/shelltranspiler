@@ -7,35 +7,35 @@ mod parser;
 mod transpiler;
 
 #[derive(Debug, Clone)]
-enum Statement {
+enum Statement<'a> {
     Expression(Expr),
     Assignment(String, Expr),
     LocalAssignment(String, Expr),
-    Function(String, Vec<Vec<String>>, Vec<Statement>),
-    If(IfStatement),
+    Function(String, Vec<Vec<String>>, Vec<Statement<'a>>),
+    If(IfStatement<'a>),
     Empty,
 }
 
 #[derive(Debug, Clone)]
-struct IfStatement {
-    cond: Condition,
-    statements: Vec<Statement>,
-    continue_if: Box<Option<ContinueIfStatement>>,
+struct IfStatement<'a> {
+    cond: Condition<'a>,
+    statements: Vec<Statement<'a>>,
+    continue_if: Box<Option<ContinueIfStatement<'a>>>,
 }
 
 #[derive(Debug, Clone)]
-enum Condition {
+enum Condition<'a> {
     Expression(Expr),
-    Equal(Expr, Expr),
-    Not(Box<Condition>),
-    And(Box<Condition>, Box<Condition>),
-    Or(Box<Condition>, Box<Condition>),
+    Operator(&'a str, Expr, Expr),
+    Not(Box<Condition<'a>>),
+    And(Box<Condition<'a>>, Box<Condition<'a>>),
+    Or(Box<Condition<'a>>, Box<Condition<'a>>),
 }
 
 #[derive(Debug, Clone)]
-enum ContinueIfStatement {
-    If(IfStatement),
-    Else(Vec<Statement>),
+enum ContinueIfStatement<'a> {
+    If(IfStatement<'a>),
+    Else(Vec<Statement<'a>>),
 }
 
 #[derive(Debug, Clone)]

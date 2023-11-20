@@ -7,15 +7,15 @@ enum Statement {
     Expression(Expr),
     Assignment(String, Expr),
     LocalAssignment(String, Expr),
-    Function(String, Vec<Vec<String>>, Box<Vec<Statement>>),
-    IfStatement(IfStatement),
+    Function(String, Vec<Vec<String>>, Vec<Statement>),
+    If(IfStatement),
     Empty,
 }
 
 #[derive(Debug, Clone)]
 struct IfStatement {
     cond: Condition,
-    statements: Box<Vec<Statement>>,
+    statements: Vec<Statement>,
     continue_if: Box<Option<ContinueIfStatement>>,
 }
 
@@ -30,7 +30,7 @@ enum Condition {
 #[derive(Debug, Clone)]
 enum ContinueIfStatement {
     If(IfStatement),
-    Else(Box<Vec<Statement>>),
+    Else(Vec<Statement>),
 }
 
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ impl State {
                 return Some(real_var);
             }
         }
-        return None;
+        None
     }
 }
 
@@ -100,7 +100,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
                 .delimited_by(just('"'), just('"'))
                 .padded();
 
-            let var = ident.clone().map(|s| Expr::Var(s));
+            let var = ident.map(Expr::Var);
 
             let call = ident
                 .then(
@@ -155,9 +155,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
                 .then(expr.clone())
                 .map(|(val1, val2)| Condition::Equal(val1, val2));
 
-            let condition = not
-                .or(is_equal)
-                .or(expr.clone().map(|e| Condition::Expression(e)));
+            let condition = not.or(is_equal).or(expr.clone().map(Condition::Expression));
 
             condition
                 .clone()
@@ -184,22 +182,20 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
                     text::keyword("else")
                         .padded()
                         .then(
-                            if_statement
-                                .map(|next_if| ContinueIfStatement::If(next_if))
-                                .or(just('{')
-                                    .ignore_then(statement.clone().repeated())
-                                    .then_ignore(just('}'))
-                                    .map(|body| ContinueIfStatement::Else(Box::new(body)))),
+                            if_statement.map(ContinueIfStatement::If).or(just('{')
+                                .ignore_then(statement.clone().repeated())
+                                .then_ignore(just('}'))
+                                .map(ContinueIfStatement::Else)),
                         )
                         .or_not(),
                 )
                 .map(|((cond, body), to_continue)| IfStatement {
                     cond,
-                    statements: Box::new(body),
+                    statements: body,
                     continue_if: Box::new(to_continue.map(|(_, v)| v)),
                 })
         })
-        .map(|if_statement| Statement::IfStatement(if_statement));
+        .map(Statement::If);
 
         let function = text::keyword("fun")
             .ignore_then(ident)
@@ -210,13 +206,13 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
             .then_ignore(just('{'))
             .then(statement.repeated())
             .then_ignore(just('}'))
-            .map(|((id, args), body)| Statement::Function(id, args, Box::new(body)));
+            .map(|((id, args), body)| Statement::Function(id, args, body));
 
         local_assignment
             .or(global_assignment)
             .or(function)
             .or(if_statement)
-            .or(expr.map(|e| Statement::Expression(e)))
+            .or(expr.map(Statement::Expression))
             .or(comment.to(Statement::Empty))
             .then_ignore(comment.or_not())
             .then_ignore(just(';').ignored().or(text::newline()).or_not())
@@ -295,7 +291,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
         }
         Statement::LocalAssignment(ident, value) => {
             let mut output = String::from("local ");
-            output.push_str(&ident);
+            output.push_str(ident);
             output.push('=');
             output.push_str(&transpile_expr(value, state)?);
             state
@@ -308,7 +304,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
         }
         Statement::Function(ident, args, conts) => {
             state.new_scope();
-            for (i, arg) in args.first().unwrap().into_iter().enumerate() {
+            for (i, arg) in args.first().unwrap().iter().enumerate() {
                 state
                     .scopes
                     .last_mut()
@@ -323,7 +319,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<String, String>
             state.end_scope();
             Ok(output)
         }
-        Statement::IfStatement(if_statement) => transpile_if(if_statement, state, true),
+        Statement::If(if_statement) => transpile_if(if_statement, state, true),
         Statement::Empty => Ok(String::new()),
     }
 }
@@ -370,7 +366,7 @@ fn transpile_if(
             }
             ContinueIfStatement::If(if_statement) => {
                 output.push_str("el");
-                output.push_str(&transpile_if(&if_statement, state, false)?)
+                output.push_str(&transpile_if(if_statement, state, false)?)
             }
         }
     }

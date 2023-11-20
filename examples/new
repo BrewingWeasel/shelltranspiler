@@ -1,3 +1,7 @@
+if (true() || false()) && (true() || false()) {
+  echo("that is very true")
+}
+
 if find(".rs") && true() {
   files=fd(".rs") |> sed("s#src/#start/#")
   if files == "start/main.rs" {

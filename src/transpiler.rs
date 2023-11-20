@@ -129,6 +129,12 @@ fn transpile_condition(condition: &Condition, state: &mut State) -> Result<Strin
             output.push_str(&transpile_condition(cond, state)?);
             Ok(output)
         }
+        Condition::InParens(cond) => {
+            let mut output = String::from("(");
+            output.push_str(&transpile_condition(cond, state)?);
+            output.push(')');
+            Ok(output)
+        }
         Condition::And(cond1, cond2) => {
             let mut output = transpile_condition(cond1, state)?;
             output.push_str(" && ");

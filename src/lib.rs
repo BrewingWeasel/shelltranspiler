@@ -28,6 +28,7 @@ enum Condition<'a> {
     Expression(Expr),
     Operator(&'a str, Expr, Expr),
     Not(Box<Condition<'a>>),
+    InParens(Box<Condition<'a>>),
     And(Box<Condition<'a>>, Box<Condition<'a>>),
     Or(Box<Condition<'a>>, Box<Condition<'a>>),
 }
@@ -97,7 +98,7 @@ pub fn transpile_from_string(input: &str) -> Result<String, Vec<String>> {
             .map_err(|e| vec![format!("Evaluation error: {}", e)]),
         Err(parse_errs) => Err(parse_errs
             .into_iter()
-            .map(|e| format!("Parse error: {}", e))
+            .map(|e| format!("Parse error: {} {:?}", e, e.span()))
             .collect()),
     }
 }

@@ -69,6 +69,12 @@ fn conditional<'a>() -> impl Parser<char, Condition<'a>, Error = Simple<char>> +
             operator(">"),
             operator("<="),
             operator("<"),
+            conditional
+                .clone()
+                .padded()
+                .delimited_by(just('('), just(')'))
+                .padded()
+                .map(|cond| Condition::InParens(Box::new(cond))),
             expr.map(Condition::Expression),
         ));
 

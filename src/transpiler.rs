@@ -11,10 +11,17 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<(String, Option<Stri
                 Err(format!("Could not find variable {s}"))
             }
         }
-        Expr::Call(f, args) => Ok((
-            format!("$__{f}_return_value"),
-            Some(call_function(f, args, state)?),
-        )),
+        Expr::Call(func, args) => {
+            if let Some(f) = state.get_func(func) {
+                if f.1.is_none() {
+                    return Err(format!("Function {func} does not have a return value. Maybe you meant to call it piped? (<{func})"));
+                }
+            }
+            Ok((
+                format!("$__{func}_return_value"),
+                Some(call_function(func, args, state)?),
+            ))
+        }
         Expr::CallPiped(f, args) => {
             let mut output = String::from("$(");
             output.push_str(&call_function(f, args, state)?);

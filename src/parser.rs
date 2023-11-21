@@ -1,9 +1,12 @@
 use crate::Type;
 use crate::{Condition, ContinueIfStatement, Expr, IfStatement, Statement};
-use chumsky::prelude::*;
-use chumsky::Parser;
+use chumsky::extra::Err;
+use chumsky::{prelude::*, Parser};
 
-fn get_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
+pub type Span = SimpleSpan<usize>;
+pub type ParseErr<'src> = Err<Rich<'src, char, Span>>;
+
+fn get_type<'src>() -> impl Parser<'src, &'src str, Type, ParseErr<'src>> + Clone {
     choice((
         text::keyword("string").to(Type::Str),
         text::keyword("int").to(Type::Num),
@@ -11,19 +14,21 @@ fn get_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
     .padded()
 }
 
-fn type_assignment() -> impl Parser<char, Option<Type>, Error = Simple<char>> + Clone {
+fn type_assignment<'src>() -> impl Parser<'src, &'src str, Option<Type>, ParseErr<'src>> + Clone {
     just(':').ignore_then(get_type()).or_not()
 }
 
-fn expression() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
+fn expression<'src>() -> impl Parser<'src, &'src str, Expr<'src>, ParseErr<'src>> + Clone {
     let ident = text::ident().padded();
     recursive(|expr| {
         let int = text::int(10)
-            .map(|s: String| Expr::Num(s.parse().unwrap()))
+            .map(|s: &str| Expr::Num(s.parse().unwrap()))
             .padded();
 
-        let strvalue = filter::<_, _, Simple<char>>(|c: &char| *c != '"')
+        let strvalue = any()
+            .filter(|c: &char| *c != '"')
             .repeated()
+            .collect()
             .map(|s: Vec<char>| Expr::Str(s.into_iter().collect()))
             .delimited_by(just('"'), just('"'))
             .padded();
@@ -34,6 +39,7 @@ fn expression() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
             expr.clone()
                 .separated_by(just(','))
                 .allow_trailing()
+                .collect::<Vec<_>>()
                 .delimited_by(just('('), just(')')),
         );
 
@@ -64,7 +70,7 @@ fn expression() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
     })
 }
 
-fn conditional<'a>() -> impl Parser<char, Condition<'a>, Error = Simple<char>> + Clone {
+fn conditional<'src>() -> impl Parser<'src, &'src str, Condition<'src>, ParseErr<'src>> + Clone {
     let expr = expression();
     recursive(|conditional| {
         let not = just("not")
@@ -116,23 +122,23 @@ fn conditional<'a>() -> impl Parser<char, Condition<'a>, Error = Simple<char>> +
     })
 }
 
-fn if_statement<'a>(
-    statement: impl Parser<char, Statement<'a>, Error = Simple<char>> + Clone + 'a,
-) -> impl Parser<char, Statement<'a>, Error = Simple<char>> + Clone + 'a {
+fn if_statement<'src>(
+    statement: impl Parser<'src, &'src str, Statement<'src>, ParseErr<'src>> + Clone + 'src,
+) -> impl Parser<'src, &'src str, Statement<'src>, ParseErr<'src>> + Clone {
     recursive(|if_statement| {
         text::keyword("if")
             .padded()
             .ignore_then(conditional())
             .padded()
             .then_ignore(just('{'))
-            .then(statement.clone().repeated())
+            .then(statement.clone().repeated().collect::<Vec<_>>())
             .then_ignore(just('}'))
             .then(
                 text::keyword("else")
                     .padded()
                     .then(
                         if_statement.map(ContinueIfStatement::If).or(just('{')
-                            .ignore_then(statement.clone().repeated())
+                            .ignore_then(statement.clone().repeated().collect())
                             .then_ignore(just('}'))
                             .map(ContinueIfStatement::Else)),
                     )
@@ -147,7 +153,7 @@ fn if_statement<'a>(
     .map(Statement::If)
 }
 
-pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char>> {
+pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<Statement<'src>>, ParseErr<'src>> {
     let ident = text::ident().padded();
 
     let statement = recursive(|statement| {
@@ -157,8 +163,8 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
             .then_ignore(just('='))
             .then(expr.clone());
 
-        let comment = just::<_, _, Simple<char>>('#')
-            .then_ignore(filter(|c| *c != '\n').repeated())
+        let comment = just('#')
+            .then_ignore(any().filter(|c| *c != '\n').repeated())
             .then_ignore(text::newline());
 
         let local_assignment = text::keyword("local")
@@ -183,13 +189,14 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
                 ident
                     .then(type_assignment())
                     .separated_by(just(','))
-                    .allow_trailing(),
+                    .allow_trailing()
+                    .collect::<Vec<_>>(),
             )
             .then_ignore(just(')'))
             .padded()
             .then(just("->").padded().ignore_then(get_type()).or_not())
             .then_ignore(just('{'))
-            .then(statement.repeated())
+            .then(statement.repeated().collect::<Vec<_>>())
             .then_ignore(just('}'))
             .map(|(((id, args), return_type), body)| {
                 Statement::Function(id, args, return_type, body)
@@ -207,5 +214,5 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
             .padded()
     });
 
-    statement.repeated().then_ignore(end())
+    statement.repeated().collect().then_ignore(end())
 }

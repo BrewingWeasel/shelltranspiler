@@ -55,7 +55,7 @@ fn call_function(f: &str, args: &Vec<Expr>, state: &mut State) -> Result<String,
                 args.len()
             ));
         }
-        for (arg, (arg_name, possible_arg_type)) in args.iter().zip(actual_args) {
+        for (arg, (arg_name, possible_arg_type)) in args.iter().zip(actual_args.iter()) {
             if let Some(arg_type) = possible_arg_type {
                 if &arg.get_type(state) != arg_type {
                     return Err(format!(
@@ -104,18 +104,18 @@ enum AssignmentType {
     Global,
 }
 
-fn assignment(
-    ident: &str,
+fn assignment<'state, 'src: 'state>(
+    ident: String,
     var_type: &Option<Type>,
     value: &Expr,
     assignment_type: AssignmentType,
-    state: &mut State,
+    state: &mut State<'state>,
 ) -> Result<(String, Option<String>), String> {
     let mut output = match assignment_type {
         AssignmentType::Local => String::from("local "),
         AssignmentType::Global => String::new(),
     };
-    output.push_str(ident);
+    output.push_str(&ident);
     output.push('=');
 
     if let Some(attempted_type) = var_type {
@@ -138,26 +138,37 @@ fn assignment(
     scope
         .unwrap()
         .vars
-        .insert(ident.to_owned(), (ident.to_owned(), *var_type));
+        .insert(ident.clone(), (ident, *var_type));
     Ok((output, run_before))
 }
 
-fn transpile(statement: &Statement, state: &mut State) -> Result<(String, Option<String>), String> {
+fn transpile<'state, 'src: 'state>(
+    statement: &'src Statement,
+    state: &mut State<'state>,
+) -> Result<(String, Option<String>), String> {
     match statement {
         Statement::Expression(expr) => transpile_repr(expr, state),
-        Statement::Assignment(ident, var_type, value) => {
-            assignment(ident, var_type, value, AssignmentType::Global, state)
-        }
-        Statement::LocalAssignment(ident, var_type, value) => {
-            assignment(ident, var_type, value, AssignmentType::Local, state)
-        }
+        Statement::Assignment(ident, var_type, value) => assignment(
+            ident.to_string(),
+            var_type,
+            value,
+            AssignmentType::Global,
+            state,
+        ),
+        Statement::LocalAssignment(ident, var_type, value) => assignment(
+            ident.to_string(),
+            var_type,
+            value,
+            AssignmentType::Local,
+            state,
+        ),
         Statement::Function(ident, args, return_type, conts) => {
             state
                 .scopes
                 .first_mut()
                 .unwrap()
                 .functions
-                .insert(ident.to_owned(), (args.to_owned(), *return_type));
+                .insert(ident.to_owned(), (args, *return_type));
             state.new_scope(ident);
             for (i, (arg, arg_type)) in args.iter().enumerate() {
                 state
@@ -165,10 +176,10 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<(String, Option
                     .last_mut()
                     .unwrap()
                     .vars
-                    .insert(arg.to_owned(), ((i + 1).to_string(), *arg_type));
+                    .insert(arg.to_string(), ((i + 1).to_string(), *arg_type));
             }
 
-            let mut output = String::from(ident);
+            let mut output = String::from(*ident);
             output.push_str("() {\n");
             output.push_str(&transpile_from_ast(conts, state)?);
             output.push('}');
@@ -179,7 +190,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<(String, Option
             let func_name = &state.scopes.last().unwrap().name;
             if let Some(return_type) = state.get_func(func_name).unwrap().1 {
                 assignment(
-                    &format!("__{func_name}_return_value"),
+                    format!("__{func_name}_return_value"),
                     &Some(return_type),
                     value,
                     AssignmentType::Global,
@@ -264,9 +275,9 @@ fn transpile_condition(
     }
 }
 
-fn transpile_if(
-    if_statement: &IfStatement,
-    state: &mut State,
+fn transpile_if<'state, 'src: 'state>(
+    if_statement: &'src IfStatement,
+    state: &mut State<'state>,
     ends_if: bool,
 ) -> Result<(String, Option<String>), String> {
     let mut output = String::from("if ");
@@ -293,7 +304,10 @@ fn transpile_if(
     Ok((output, run_before))
 }
 
-pub fn transpile_from_ast(conts: &Vec<Statement>, state: &mut State) -> Result<String, String> {
+pub fn transpile_from_ast<'state, 'src: 'state>(
+    conts: &'src Vec<Statement<'src>>,
+    state: &mut State<'state>,
+) -> Result<String, String> {
     let mut compiled = String::new();
     for expr in conts {
         let (output, run_before) = transpile(expr, state)?;

@@ -7,21 +7,21 @@ use transpiler::transpile_from_ast;
 mod parser;
 mod transpiler;
 
-type Function = (Vec<(String, Option<Type>)>, Option<Type>);
+type Function<'src> = (&'src [(&'src str, Option<Type>)], Option<Type>);
 
 #[derive(Debug, Clone)]
-enum Statement<'a> {
-    Expression(Expr),
-    Assignment(String, Option<Type>, Expr),
-    LocalAssignment(String, Option<Type>, Expr),
+enum Statement<'src> {
+    Expression(Expr<'src>),
+    Assignment(&'src str, Option<Type>, Expr<'src>),
+    LocalAssignment(&'src str, Option<Type>, Expr<'src>),
     Function(
-        String,
-        Vec<(String, Option<Type>)>,
+        &'src str,
+        Vec<(&'src str, Option<Type>)>,
         Option<Type>,
-        Vec<Statement<'a>>,
+        Vec<Statement<'src>>,
     ),
-    If(IfStatement<'a>),
-    Return(Expr),
+    If(IfStatement<'src>),
+    Return(Expr<'src>),
     Empty,
 }
 
@@ -40,32 +40,32 @@ struct IfStatement<'a> {
 }
 
 #[derive(Debug, Clone)]
-enum Condition<'a> {
-    Expression(Expr),
-    Operator(&'a str, Expr, Expr),
-    Not(Box<Condition<'a>>),
-    InParens(Box<Condition<'a>>),
-    And(Box<Condition<'a>>, Box<Condition<'a>>),
-    Or(Box<Condition<'a>>, Box<Condition<'a>>),
+enum Condition<'src> {
+    Expression(Expr<'src>),
+    Operator(&'src str, Expr<'src>, Expr<'src>),
+    Not(Box<Condition<'src>>),
+    InParens(Box<Condition<'src>>),
+    And(Box<Condition<'src>>, Box<Condition<'src>>),
+    Or(Box<Condition<'src>>, Box<Condition<'src>>),
 }
 
 #[derive(Debug, Clone)]
-enum ContinueIfStatement<'a> {
-    If(IfStatement<'a>),
-    Else(Vec<Statement<'a>>),
+enum ContinueIfStatement<'src> {
+    If(IfStatement<'src>),
+    Else(Vec<Statement<'src>>),
 }
 
 #[derive(Debug, Clone)]
-enum Expr {
+enum Expr<'src> {
     Num(f64),
     Str(String),
-    Var(String),
-    Call(String, Vec<Expr>),
-    CallPiped(String, Vec<Expr>),
-    Pipe(Box<Expr>, Box<Expr>),
+    Var(&'src str),
+    Call(&'src str, Vec<Expr<'src>>),
+    CallPiped(&'src str, Vec<Expr<'src>>),
+    Pipe(Box<Expr<'src>>, Box<Expr<'src>>),
 }
 
-impl Expr {
+impl<'src> Expr<'src> {
     fn get_type(&self, state: &State) -> Type {
         match self {
             Self::Num(_) => Type::Num,
@@ -82,26 +82,26 @@ impl Expr {
 }
 
 #[derive(Debug, Clone)]
-struct State {
-    scopes: Vec<Scope>,
+struct State<'src> {
+    scopes: Vec<Scope<'src>>,
 }
 
-impl State {
+impl<'src> State<'src> {
     fn new() -> Self {
         Self {
-            scopes: vec![Scope::new("global".to_owned())],
+            scopes: vec![Scope::new("global")],
         }
     }
 
-    fn new_scope(&mut self, name: &str) {
-        self.scopes.push(Scope::new(name.to_owned()))
+    fn new_scope(&mut self, name: &'src str) {
+        self.scopes.push(Scope::new(name))
     }
 
     fn end_scope(&mut self) {
         self.scopes.pop();
     }
 
-    fn get_var(&self, variable_name: &str) -> Option<&(String, Option<Type>)> {
+    fn get_var(&'src self, variable_name: &str) -> Option<&(String, Option<Type>)> {
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.vars.get(variable_name) {
                 return Some(real_var);
@@ -120,14 +120,14 @@ impl State {
 }
 
 #[derive(Debug, Clone)]
-struct Scope {
+struct Scope<'src> {
     vars: HashMap<String, (String, Option<Type>)>,
-    functions: HashMap<String, Function>,
-    name: String,
+    functions: HashMap<&'src str, Function<'src>>,
+    name: &'src str,
 }
 
-impl Scope {
-    fn new(name: String) -> Self {
+impl<'src> Scope<'src> {
+    fn new(name: &'src str) -> Self {
         Self {
             vars: HashMap::new(),
             functions: HashMap::new(),
@@ -138,7 +138,7 @@ impl Scope {
 
 pub fn transpile_from_string(input: &str) -> Result<String, Vec<Report>> {
     let mut state = State::new();
-    match parser().parse(input) {
+    match parser().parse(input).into_result() {
         Ok(ast) => transpile_from_ast(&ast, &mut state).map_err(|e| {
             vec![Report::build(ReportKind::Error, (), 0)
                 .with_message(e.to_string())

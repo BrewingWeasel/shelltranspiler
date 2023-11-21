@@ -1,4 +1,5 @@
 use crate::parser::parser;
+use ariadne::{Report, ReportKind};
 use chumsky::Parser;
 use std::collections::HashMap;
 use transpiler::transpile_from_ast;
@@ -135,14 +136,21 @@ impl Scope {
     }
 }
 
-pub fn transpile_from_string(input: &str) -> Result<String, Vec<String>> {
+pub fn transpile_from_string(input: &str) -> Result<String, Vec<Report>> {
     let mut state = State::new();
     match parser().parse(input) {
-        Ok(ast) => transpile_from_ast(&ast, &mut state)
-            .map_err(|e| vec![format!("Evaluation error: {}", e)]),
+        Ok(ast) => transpile_from_ast(&ast, &mut state).map_err(|e| {
+            vec![Report::build(ReportKind::Error, (), 0)
+                .with_message(e.to_string())
+                .finish()]
+        }),
         Err(parse_errs) => Err(parse_errs
             .into_iter()
-            .map(|e| format!("Parse error: {} {:?}", e, e.span()))
+            .map(|e| {
+                Report::build(ReportKind::Error, (), e.span().start)
+                    .with_message(e.to_string())
+                    .finish()
+            })
             .collect()),
     }
 }

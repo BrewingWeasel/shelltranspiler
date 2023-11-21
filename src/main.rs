@@ -1,3 +1,4 @@
+use ariadne::Source;
 use shelltranspiler::transpile_from_string;
 
 fn main() {
@@ -5,8 +6,8 @@ fn main() {
 
     match transpile_from_string(&src) {
         Ok(output) => print!("{output}"),
-        Err(errors) => errors
-            .into_iter()
-            .for_each(|e| eprintln!("Parse error: {}", e)),
+        Err(errors) => errors.into_iter().for_each(|e| {
+            e.eprint(Source::from(&src)).unwrap();
+        }),
     }
 }

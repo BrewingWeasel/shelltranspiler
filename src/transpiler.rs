@@ -294,7 +294,6 @@ fn transpile_if(
 }
 
 pub fn transpile_from_ast(conts: &Vec<Statement>, state: &mut State) -> Result<String, String> {
-    eprintln!("{:#?}", conts);
     let mut compiled = String::new();
     for expr in conts {
         let (output, run_before) = transpile(expr, state)?;

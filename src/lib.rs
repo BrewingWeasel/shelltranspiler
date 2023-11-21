@@ -77,7 +77,8 @@ impl Expr {
                 .map(|func| func.1)
                 .flatten()
                 .unwrap_or(Type::Any),
-            _ => unimplemented!(),
+            Self::CallPiped(_, _) => Type::Any,
+            Self::Pipe(_, expr) => expr.get_type(state),
         }
     }
 }

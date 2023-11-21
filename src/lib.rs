@@ -18,6 +18,7 @@ enum Statement<'a> {
         Vec<Statement<'a>>,
     ),
     If(IfStatement<'a>),
+    Return(Expr),
     Empty,
 }
 
@@ -57,6 +58,7 @@ enum Expr {
     Str(String),
     Var(String),
     Call(String, Vec<Expr>),
+    CallPiped(String, Vec<Expr>),
     Pipe(Box<Expr>, Box<Expr>),
 }
 
@@ -88,12 +90,12 @@ struct State {
 impl State {
     fn new() -> Self {
         Self {
-            scopes: vec![Scope::new()],
+            scopes: vec![Scope::new("global".to_owned())],
         }
     }
 
-    fn new_scope(&mut self) {
-        self.scopes.push(Scope::new())
+    fn new_scope(&mut self, name: &str) {
+        self.scopes.push(Scope::new(name.to_owned()))
     }
 
     fn end_scope(&mut self) {
@@ -122,13 +124,15 @@ impl State {
 struct Scope {
     vars: HashMap<String, (String, Option<Type>)>,
     functions: HashMap<String, (Vec<(String, Option<Type>)>, Option<Type>)>,
+    name: String,
 }
 
 impl Scope {
-    fn new() -> Self {
+    fn new(name: String) -> Self {
         Self {
             vars: HashMap::new(),
             functions: HashMap::new(),
+            name,
         }
     }
 }

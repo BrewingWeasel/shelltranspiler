@@ -164,6 +164,11 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
 
         let if_statement = if_statement(statement.clone());
 
+        let return_statement = text::keyword("return")
+            .padded()
+            .ignore_then(expr.clone())
+            .map(|expression| Statement::Return(expression));
+
         let function = text::keyword("fun")
             .ignore_then(ident)
             .then_ignore(just('('))
@@ -187,6 +192,7 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
             .or(global_assignment)
             .or(function)
             .or(if_statement)
+            .or(return_statement)
             .or(expr.map(Statement::Expression))
             .or(comment.to(Statement::Empty))
             .then_ignore(comment.or_not())

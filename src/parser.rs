@@ -30,21 +30,28 @@ fn expression() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
 
         let var = ident.map(Expr::Var);
 
-        let call = ident
-            .then(
-                expr.clone()
-                    .separated_by(just(','))
-                    .allow_trailing()
-                    .delimited_by(just('('), just(')')),
-            )
-            .map(|(f, args)| Expr::Call(f, args));
+        let generic_call = ident.then(
+            expr.clone()
+                .separated_by(just(','))
+                .allow_trailing()
+                .delimited_by(just('('), just(')')),
+        );
+
+        let call_piped = just('<')
+            .ignore_then(generic_call.clone())
+            .padded()
+            .map(|(f, args)| Expr::CallPiped(f, args));
+        let call = generic_call.map(|(f, args)| Expr::Call(f, args));
 
         recursive(|part| {
-            let atom = int
-                .or(expr.delimited_by(just('('), just(')')))
-                .or(strvalue)
-                .or(call)
-                .or(var);
+            let atom = choice((
+                int,
+                expr.delimited_by(just('('), just(')')),
+                strvalue,
+                call_piped,
+                call,
+                var,
+            ));
             atom.then(just("|>").padded().ignore_then(part).or_not())
                 .map(|(first, into_piped)| {
                     if let Some(second) = into_piped {

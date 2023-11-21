@@ -186,7 +186,7 @@ fn transpile(statement: &Statement, state: &mut State) -> Result<(String, Option
                     state,
                 )
             } else {
-                return Err(format!("{func_name} does not return a value"));
+                Err(format!("{func_name} does not return a value"))
             }
         }
         Statement::If(if_statement) => transpile_if(if_statement, state, true),

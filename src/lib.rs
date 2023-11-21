@@ -6,6 +6,8 @@ use transpiler::transpile_from_ast;
 mod parser;
 mod transpiler;
 
+type Function = (Vec<(String, Option<Type>)>, Option<Type>);
+
 #[derive(Debug, Clone)]
 enum Statement<'a> {
     Expression(Expr),
@@ -67,15 +69,10 @@ impl Expr {
         match self {
             Self::Num(_) => Type::Num,
             Self::Str(_) => Type::Str,
-            Self::Var(v) => state
-                .get_var(v)
-                .map(|var| var.1)
-                .flatten()
-                .unwrap_or(Type::Any),
+            Self::Var(v) => state.get_var(v).and_then(|var| var.1).unwrap_or(Type::Any),
             Self::Call(func, _) => state
                 .get_func(func)
-                .map(|func| func.1)
-                .flatten()
+                .and_then(|func| func.1)
                 .unwrap_or(Type::Any),
             Self::CallPiped(_, _) => Type::Any,
             Self::Pipe(_, expr) => expr.get_type(state),
@@ -111,7 +108,7 @@ impl State {
         }
         None
     }
-    fn get_func(&self, function: &str) -> Option<&(Vec<(String, Option<Type>)>, Option<Type>)> {
+    fn get_func(&self, function: &str) -> Option<&Function> {
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.functions.get(function) {
                 return Some(real_var);
@@ -124,7 +121,7 @@ impl State {
 #[derive(Debug, Clone)]
 struct Scope {
     vars: HashMap<String, (String, Option<Type>)>,
-    functions: HashMap<String, (Vec<(String, Option<Type>)>, Option<Type>)>,
+    functions: HashMap<String, Function>,
     name: String,
 }
 

@@ -174,7 +174,7 @@ pub fn parser<'a>() -> impl Parser<char, Vec<Statement<'a>>, Error = Simple<char
         let return_statement = text::keyword("return")
             .padded()
             .ignore_then(expr.clone())
-            .map(|expression| Statement::Return(expression));
+            .map(Statement::Return);
 
         let function = text::keyword("fun")
             .ignore_then(ident)

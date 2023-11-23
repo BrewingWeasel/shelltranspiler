@@ -8,10 +8,15 @@ pub type Spanned<T> = (T, Span);
 pub type ParseErr<'src> = Err<Rich<'src, char, Span>>;
 
 fn get_type<'src>() -> impl Parser<'src, &'src str, Type, ParseErr<'src>> + Clone {
-    choice((
-        text::keyword("string").to(Type::Str),
-        text::keyword("int").to(Type::Num),
-    ))
+    recursive(|type_name| {
+        choice((
+            text::keyword("string").to(Type::Str),
+            text::keyword("int").to(Type::Num),
+            type_name
+                .delimited_by(just('['), just(']'))
+                .map(|t| Type::List(Box::new(t))),
+        ))
+    })
     .padded()
 }
 
@@ -57,8 +62,15 @@ fn expression<'src>() -> impl Parser<'src, &'src str, Spanned<Expr<'src>>, Parse
         recursive(|part| {
             let atom = choice((
                 int,
-                expr.map(|(expr, _)| expr)
+                expr.clone()
+                    .map(|(expr, _)| expr)
                     .delimited_by(just('('), just(')')),
+                expr.separated_by(just(','))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .delimited_by(just('['), just(']'))
+                    .map_with(|values, e| Expr::List((values, e.span())))
+                    .padded(),
                 strvalue,
                 call_piped,
                 call,

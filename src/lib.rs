@@ -30,11 +30,12 @@ enum Statement<'src> {
     Empty,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq)]
 enum Type {
     Str,
     Num,
     Any,
+    List(Box<Type>),
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +65,7 @@ enum ContinueIfStatement<'src> {
 enum Expr<'src> {
     Num(f64),
     Str(String),
+    List(Spanned<Vec<Spanned<Expr<'src>>>>),
     Var(&'src str),
     Call(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
     CallPiped(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
@@ -75,10 +77,18 @@ impl<'src> Expr<'src> {
         match self {
             Self::Num(_) => Type::Num,
             Self::Str(_) => Type::Str,
-            Self::Var(v) => state.get_var(v).and_then(|var| var.1).unwrap_or(Type::Any),
+            Self::List(v) => Type::List(
+                v.0.first()
+                    .map(|v| Box::new(v.0.get_type(state)))
+                    .unwrap_or(Box::new(Type::Any)),
+            ),
+            Self::Var(v) => state
+                .get_var(v)
+                .and_then(|var| var.1.clone())
+                .unwrap_or(Type::Any),
             Self::Call(func, _) => state
                 .get_func(func)
-                .and_then(|func| func.return_value)
+                .and_then(|func| func.return_value.clone())
                 .unwrap_or(Type::Any),
             Self::CallPiped(_, _) => Type::Any,
             Self::Pipe(_, expr) => expr.0.get_type(state),

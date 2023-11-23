@@ -11,9 +11,24 @@ fn transpile_expr<'a>(
     match expr.0 {
         Expr::Num(x) => Ok((format!("'{x}'"), None)),
         Expr::Str(s) => Ok((format!("'{s}'"), None)),
+        Expr::List(elements) => {
+            let (mut output, mut add_before) = (String::from("("), String::new());
+            for elem in &elements.0 {
+                let (new_output, new_add_before) = transpile_expr((&elem.0, elem.1), state)?;
+                if let Some(before) = new_add_before {
+                    add_before.push_str(&before);
+                    add_before.push('\n');
+                }
+                output.push_str(&new_output);
+                output.push(' ');
+                // TODO: type checking
+            }
+            output.push(')');
+            Ok((output, Some(add_before)))
+        }
         Expr::Var(s) => {
             if let Some((sh_variable_name, _type)) = state.get_var(s) {
-                Ok((format!("${sh_variable_name}"), None))
+                Ok((format!("\"${sh_variable_name}\""), None))
             } else {
                 Err(Rich::custom(expr.1, format!("Could not find variable {s}")))
             }
@@ -171,7 +186,7 @@ fn assignment<'state, 'src: 'state>(
     scope
         .unwrap()
         .vars
-        .insert(ident.clone(), (ident, *var_type));
+        .insert(ident.clone(), (ident, var_type.to_owned()));
     Ok((output, run_before))
 }
 
@@ -200,7 +215,7 @@ fn transpile<'state, 'src: 'state>(
                 ident.to_owned(),
                 crate::Function {
                     args,
-                    return_value: *return_value,
+                    return_value: return_value.to_owned(),
                     times_called: 0,
                 },
             );
@@ -211,7 +226,7 @@ fn transpile<'state, 'src: 'state>(
                     .last_mut()
                     .unwrap()
                     .vars
-                    .insert(arg.to_string(), ((i + 2).to_string(), *arg_type));
+                    .insert(arg.to_string(), ((i + 2).to_string(), arg_type.to_owned()));
             }
 
             let mut output = String::from(*ident);
@@ -223,7 +238,7 @@ fn transpile<'state, 'src: 'state>(
         }
         Statement::Return(value) => {
             let func_name = state.scopes.last().unwrap().name;
-            if let Some(return_type) = state.get_func(func_name).unwrap().return_value {
+            if let Some(return_type) = state.get_func(func_name).unwrap().return_value.clone() {
                 let (mut output, run_before) = assignment(
                     format!("__return_val"),
                     &Some(return_type),

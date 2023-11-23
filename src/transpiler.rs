@@ -237,6 +237,7 @@ fn transpile<'state, 'src: 'state>(
                 output.push_str(&format!(
                     "\neval \"__{func_name}_return_value_$1=\\\"$__return_val\\\"\""
                 ));
+                output.push_str("\nreturn 0");
                 Ok((output, run_before))
             } else {
                 Err(Rich::custom(

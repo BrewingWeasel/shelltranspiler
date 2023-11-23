@@ -7,7 +7,12 @@ use transpiler::transpile_from_ast;
 mod parser;
 mod transpiler;
 
-type Function<'src> = (&'src [(&'src str, Option<Type>)], Option<Type>);
+#[derive(Debug, Clone)]
+struct Function<'src> {
+    args: &'src [(&'src str, Option<Type>)],
+    return_value: Option<Type>,
+    times_called: usize,
+}
 
 #[derive(Debug, Clone)]
 enum Statement<'src> {
@@ -73,7 +78,7 @@ impl<'src> Expr<'src> {
             Self::Var(v) => state.get_var(v).and_then(|var| var.1).unwrap_or(Type::Any),
             Self::Call(func, _) => state
                 .get_func(func)
-                .and_then(|func| func.1)
+                .and_then(|func| func.return_value)
                 .unwrap_or(Type::Any),
             Self::CallPiped(_, _) => Type::Any,
             Self::Pipe(_, expr) => expr.0.get_type(state),
@@ -109,6 +114,7 @@ impl<'src> State<'src> {
         }
         None
     }
+
     fn get_func(&self, function: &str) -> Option<&Function> {
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.functions.get(function) {
@@ -116,6 +122,22 @@ impl<'src> State<'src> {
             }
         }
         None
+    }
+
+    fn call_func(&mut self, function: &str) {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(real_var) = scope.functions.get_mut(function) {
+                real_var.times_called += 1;
+            }
+        }
+    }
+
+    fn get_times_called(&self, function: &str) -> usize {
+        if let Some(f) = self.get_func(function) {
+            f.times_called
+        } else {
+            0 // TODO: does thsi make sense
+        }
     }
 }
 

@@ -20,15 +20,16 @@ fn transpile_expr<'a>(
         }
         Expr::Call(func, args) => {
             if let Some(f) = state.get_func(func) {
-                if f.1.is_none() {
+                if f.return_value.is_none() {
                     return Err(Rich::custom(
                         expr.1,
                         format!("Function {func} does not have a return value. Maybe you meant to call it piped? (<{func})"))
                     );
                 }
             }
+            let var_name = format!("$__{func}_return_value_{}", state.get_times_called(func));
             Ok((
-                format!("$__{func}_return_value"),
+                var_name,
                 Some(call_function(func, (&args.0, args.1), state)?),
             ))
         }
@@ -62,8 +63,8 @@ fn call_function<'a>(
 ) -> Result<String, Rich<'a, char>> {
     let (args, args_span) = args;
     let mut output = String::new();
-    if let Some((actual_args, _return_type)) = state.get_func(f) {
-        if args.len() != actual_args.len() {
+    if let Some(func) = state.get_func(f) {
+        if args.len() != func.args.len() {
             let span = match args.len() {
                 0 => args_span,
                 1 => args.first().unwrap().1,
@@ -73,12 +74,12 @@ fn call_function<'a>(
                 span,
                 format!(
                     "{f} expected {} arguments, but got {}",
-                    actual_args.len(),
+                    func.args.len(),
                     args.len()
                 ),
             ));
         }
-        for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(actual_args.iter()) {
+        for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(func.args.iter()) {
             if let Some(arg_type) = possible_arg_type {
                 if &arg.get_type(state) != arg_type {
                     return Err(Rich::custom(
@@ -93,6 +94,11 @@ fn call_function<'a>(
         }
     }
     let mut function_call_output = String::from(f);
+    if f != "echo" {
+        // TODO: make builtin commands return values, make this different
+        function_call_output.push(' ');
+        function_call_output.push_str(&state.get_times_called(f).to_string());
+    }
     for (arg, span) in args.iter() {
         function_call_output.push(' ');
         let (normal_expr, run_before) = transpile_expr((arg, *span), state)?;
@@ -103,6 +109,7 @@ fn call_function<'a>(
         function_call_output.push_str(&normal_expr);
     }
     output.push_str(&function_call_output);
+    state.call_func(f);
     Ok(output)
 }
 
@@ -191,13 +198,15 @@ fn transpile<'state, 'src: 'state>(
             AssignmentType::Local,
             state,
         ),
-        Statement::Function(ident, args, return_type, conts) => {
-            state
-                .scopes
-                .first_mut()
-                .unwrap()
-                .functions
-                .insert(ident.to_owned(), (args, *return_type));
+        Statement::Function(ident, args, return_value, conts) => {
+            state.scopes.first_mut().unwrap().functions.insert(
+                ident.to_owned(),
+                crate::Function {
+                    args,
+                    return_value: *return_value,
+                    times_called: 0,
+                },
+            );
             state.new_scope(ident);
             for (i, (arg, arg_type)) in args.iter().enumerate() {
                 state
@@ -205,7 +214,7 @@ fn transpile<'state, 'src: 'state>(
                     .last_mut()
                     .unwrap()
                     .vars
-                    .insert(arg.to_string(), ((i + 1).to_string(), *arg_type));
+                    .insert(arg.to_string(), ((i + 2).to_string(), *arg_type));
             }
 
             let mut output = String::from(*ident);
@@ -216,15 +225,19 @@ fn transpile<'state, 'src: 'state>(
             Ok((output, None))
         }
         Statement::Return(value) => {
-            let func_name = &state.scopes.last().unwrap().name;
-            if let Some(return_type) = state.get_func(func_name).unwrap().1 {
-                assignment(
-                    format!("__{func_name}_return_value"),
+            let func_name = state.scopes.last().unwrap().name;
+            if let Some(return_type) = state.get_func(func_name).unwrap().return_value {
+                let (mut output, run_before) = assignment(
+                    format!("__return_val"),
                     &Some(return_type),
                     (&value.0, value.1),
                     AssignmentType::Global,
                     state,
-                )
+                )?;
+                output.push_str(&format!(
+                    "\neval \"__{func_name}_return_value_$1=\\\"$__return_val\\\"\""
+                ));
+                Ok((output, run_before))
             } else {
                 Err(Rich::custom(
                     statement.1,

@@ -132,11 +132,11 @@ impl<'src> State<'src> {
         }
     }
 
-    fn get_times_called(&self, function: &str) -> usize {
+    fn get_times_called(&self, function: &str) -> String {
         if let Some(f) = self.get_func(function) {
-            f.times_called
+            f.times_called.to_string()
         } else {
-            0 // TODO: does thsi make sense
+            String::new()
         }
     }
 }

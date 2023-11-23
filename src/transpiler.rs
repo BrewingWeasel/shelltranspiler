@@ -94,11 +94,8 @@ fn call_function<'a>(
         }
     }
     let mut function_call_output = String::from(f);
-    if f != "echo" {
-        // TODO: make builtin commands return values, make this different
-        function_call_output.push(' ');
-        function_call_output.push_str(&state.get_times_called(f).to_string());
-    }
+    function_call_output.push(' ');
+    function_call_output.push_str(&state.get_times_called(f));
     for (arg, span) in args.iter() {
         function_call_output.push(' ');
         let (normal_expr, run_before) = transpile_expr((arg, *span), state)?;

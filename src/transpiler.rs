@@ -243,7 +243,7 @@ fn transpile<'state, 'src: 'state>(
                 ))
             }
         }
-        Statement::If(if_statement) => transpile_if((&if_statement.0, if_statement.1), state, true),
+        Statement::If(if_statement) => transpile_if((&if_statement.0, if_statement.1), state),
         Statement::Empty => Ok((String::new(), None)),
     }
 }
@@ -256,7 +256,7 @@ fn transpile_condition<'src>(
         Condition::Expression(expr) => transpile_repr((&expr.0, condition.1), state),
         Condition::Operator(op, expr1, expr2) => {
             let mut output = String::from("[ ");
-            let (new_output, mut run_before) = transpile_repr((&expr1.0, condition.1), state)?;
+            let (new_output, mut run_before) = transpile_expr((&expr1.0, condition.1), state)?;
             output.push_str(&new_output);
 
             output.push(' ');
@@ -273,7 +273,7 @@ fn transpile_condition<'src>(
             output.push(' ');
 
             let (second_output, second_run_before) =
-                transpile_repr((&expr2.0, condition.1), state)?;
+                transpile_expr((&expr2.0, condition.1), state)?;
             if let Some(run) = second_run_before {
                 run_before = Some(run_before.unwrap_or_default() + &run);
             }
@@ -324,7 +324,6 @@ fn transpile_condition<'src>(
 fn transpile_if<'state, 'src: 'state>(
     if_statement: Spanned<&'src IfStatement>,
     state: &mut State<'state>,
-    ends_if: bool,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     let mut output = String::from("if ");
     let condition = &if_statement.0.cond;
@@ -339,15 +338,17 @@ fn transpile_if<'state, 'src: 'state>(
                 output.push_str(&transpile_from_ast(statements, state)?);
             }
             ContinueIfStatement::If(if_statement) => {
-                output.push_str("el");
-                // FIX: this (use else and then if prbly?)
-                output.push_str(&transpile_if((&if_statement.0, if_statement.1), state, false)?.0)
+                output.push_str("else\n");
+                let (new_output, run_before) =
+                    transpile_if((&if_statement.0, if_statement.1), state)?;
+                output.push_str(&run_before.unwrap_or_default());
+                output.push('\n');
+                output.push_str(&new_output);
+                output.push('\n');
             }
         }
     }
-    if ends_if {
-        output.push_str("fi");
-    }
+    output.push_str("fi");
     Ok((output, run_before))
 }
 

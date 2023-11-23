@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 ariadne = "0.3.0"
-chumsky = "1.0.0-alpha.6"
+chumsky = { version = "1.0.0-alpha.6", features = ["label"] }

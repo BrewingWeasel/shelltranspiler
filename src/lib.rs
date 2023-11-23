@@ -1,6 +1,6 @@
 use crate::parser::parser;
-use ariadne::{Report, ReportKind};
-use chumsky::Parser;
+use chumsky::{prelude::Rich, span::SimpleSpan, Parser};
+use parser::Spanned;
 use std::collections::HashMap;
 use transpiler::transpile_from_ast;
 
@@ -11,17 +11,17 @@ type Function<'src> = (&'src [(&'src str, Option<Type>)], Option<Type>);
 
 #[derive(Debug, Clone)]
 enum Statement<'src> {
-    Expression(Expr<'src>),
-    Assignment(&'src str, Option<Type>, Expr<'src>),
-    LocalAssignment(&'src str, Option<Type>, Expr<'src>),
+    Expression(Spanned<Expr<'src>>),
+    Assignment(&'src str, Option<Type>, Spanned<Expr<'src>>),
+    LocalAssignment(&'src str, Option<Type>, Spanned<Expr<'src>>),
     Function(
         &'src str,
         Vec<(&'src str, Option<Type>)>,
         Option<Type>,
-        Vec<Statement<'src>>,
+        Vec<Spanned<Statement<'src>>>,
     ),
-    If(IfStatement<'src>),
-    Return(Expr<'src>),
+    If(Spanned<IfStatement<'src>>),
+    Return(Spanned<Expr<'src>>),
     Empty,
 }
 
@@ -34,15 +34,15 @@ enum Type {
 
 #[derive(Debug, Clone)]
 struct IfStatement<'a> {
-    cond: Condition<'a>,
-    statements: Vec<Statement<'a>>,
+    cond: Spanned<Condition<'a>>,
+    statements: Vec<Spanned<Statement<'a>>>,
     continue_if: Box<Option<ContinueIfStatement<'a>>>,
 }
 
 #[derive(Debug, Clone)]
 enum Condition<'src> {
-    Expression(Expr<'src>),
-    Operator(&'src str, Expr<'src>, Expr<'src>),
+    Expression(Spanned<Expr<'src>>),
+    Operator(&'src str, Spanned<Expr<'src>>, Spanned<Expr<'src>>),
     Not(Box<Condition<'src>>),
     InParens(Box<Condition<'src>>),
     And(Box<Condition<'src>>, Box<Condition<'src>>),
@@ -51,8 +51,8 @@ enum Condition<'src> {
 
 #[derive(Debug, Clone)]
 enum ContinueIfStatement<'src> {
-    If(IfStatement<'src>),
-    Else(Vec<Statement<'src>>),
+    If(Spanned<IfStatement<'src>>),
+    Else(Vec<Spanned<Statement<'src>>>),
 }
 
 #[derive(Debug, Clone)]
@@ -60,9 +60,9 @@ enum Expr<'src> {
     Num(f64),
     Str(String),
     Var(&'src str),
-    Call(&'src str, Vec<Expr<'src>>),
-    CallPiped(&'src str, Vec<Expr<'src>>),
-    Pipe(Box<Expr<'src>>, Box<Expr<'src>>),
+    Call(&'src str, Vec<Spanned<Expr<'src>>>),
+    CallPiped(&'src str, Vec<Spanned<Expr<'src>>>),
+    Pipe(Box<Spanned<Expr<'src>>>, Box<Spanned<Expr<'src>>>),
 }
 
 impl<'src> Expr<'src> {
@@ -76,7 +76,7 @@ impl<'src> Expr<'src> {
                 .and_then(|func| func.1)
                 .unwrap_or(Type::Any),
             Self::CallPiped(_, _) => Type::Any,
-            Self::Pipe(_, expr) => expr.get_type(state),
+            Self::Pipe(_, expr) => expr.0.get_type(state),
         }
     }
 }
@@ -136,21 +136,11 @@ impl<'src> Scope<'src> {
     }
 }
 
-pub fn transpile_from_string(input: &str) -> Result<String, Vec<Report>> {
+pub fn transpile_from_string(input: &str) -> Result<String, Vec<Rich<char>>> {
     let mut state = State::new();
     match parser().parse(input).into_result() {
-        Ok(ast) => transpile_from_ast(&ast, &mut state).map_err(|e| {
-            vec![Report::build(ReportKind::Error, (), 0)
-                .with_message(e.to_string())
-                .finish()]
-        }),
-        Err(parse_errs) => Err(parse_errs
-            .into_iter()
-            .map(|e| {
-                Report::build(ReportKind::Error, (), e.span().start)
-                    .with_message(e.to_string())
-                    .finish()
-            })
-            .collect()),
+        Ok(ast) => transpile_from_ast(&ast, &mut state)
+            .map_err(|e| vec![Rich::custom(SimpleSpan::new(0, 4), e)]),
+        Err(parse_errs) => Err(parse_errs),
     }
 }

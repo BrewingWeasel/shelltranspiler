@@ -1,20 +1,30 @@
-use crate::{Condition, ContinueIfStatement, Expr, IfStatement, State, Statement, Type};
+use chumsky::{prelude::Rich, span::Span};
 
-fn transpile_expr(expr: &Expr, state: &mut State) -> Result<(String, Option<String>), String> {
-    match expr {
+use crate::{
+    parser::Spanned, Condition, ContinueIfStatement, Expr, IfStatement, State, Statement, Type,
+};
+
+fn transpile_expr<'a>(
+    expr: Spanned<&'a Expr>,
+    state: &mut State,
+) -> Result<(String, Option<String>), Rich<'a, char>> {
+    match expr.0 {
         Expr::Num(x) => Ok((format!("'{x}'"), None)),
         Expr::Str(s) => Ok((format!("'{s}'"), None)),
         Expr::Var(s) => {
             if let Some((sh_variable_name, _type)) = state.get_var(s) {
                 Ok((format!("${sh_variable_name}"), None))
             } else {
-                Err(format!("Could not find variable {s}"))
+                Err(Rich::custom(expr.1, format!("Could not find variable {s}")))
             }
         }
         Expr::Call(func, args) => {
             if let Some(f) = state.get_func(func) {
                 if f.1.is_none() {
-                    return Err(format!("Function {func} does not have a return value. Maybe you meant to call it piped? (<{func})"));
+                    return Err(Rich::custom(
+                        expr.1,
+                        format!("Function {func} does not have a return value. Maybe you meant to call it piped? (<{func})"))
+                    );
                 }
             }
             Ok((
@@ -30,11 +40,11 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<(String, Option<Stri
         }
         Expr::Pipe(first, second) => {
             let mut output = String::from("$(");
-            let (new_output, run_before) = transpile_repr(first, state)?;
+            let (new_output, run_before) = transpile_repr((&first.0, first.1), state)?;
             output.push_str(&new_output);
             output.push_str(" | ");
 
-            let (second_output, second_run_before) = transpile_repr(second, state)?;
+            let (second_output, second_run_before) = transpile_repr((&second.0, second.1), state)?;
             if let Some(run) = second_run_before {
                 run_before.unwrap_or_default().push_str(&run);
             }
@@ -45,31 +55,46 @@ fn transpile_expr(expr: &Expr, state: &mut State) -> Result<(String, Option<Stri
     }
 }
 
-fn call_function(f: &str, args: &Vec<Expr>, state: &mut State) -> Result<String, String> {
+fn call_function<'a>(
+    f: &str,
+    args: &'a Vec<Spanned<Expr>>,
+    state: &mut State,
+) -> Result<String, Rich<'a, char>> {
     let mut output = String::new();
     if let Some((actual_args, _return_type)) = state.get_func(f) {
         if args.len() != actual_args.len() {
-            return Err(format!(
-                "{f} expected {} arguments, but got {}",
-                actual_args.len(),
-                args.len()
+            let span = match args.len() {
+                0 => unimplemented!(),
+                1 => args.first().unwrap().1,
+                _ => args.first().unwrap().1.union(args.last().unwrap().1),
+            };
+            return Err(Rich::custom(
+                span,
+                format!(
+                    "{f} expected {} arguments, but got {}",
+                    actual_args.len(),
+                    args.len()
+                ),
             ));
         }
-        for (arg, (arg_name, possible_arg_type)) in args.iter().zip(actual_args.iter()) {
+        for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(actual_args.iter()) {
             if let Some(arg_type) = possible_arg_type {
                 if &arg.get_type(state) != arg_type {
-                    return Err(format!(
-                        "Expected {:?} to match the type of {arg_name} ({:?})",
-                        arg, arg_type
+                    return Err(Rich::custom(
+                        *span,
+                        format!(
+                            "Expected {:?} to match the type of {arg_name} ({:?})",
+                            arg, arg_type
+                        ),
                     ));
                 }
             }
         }
     }
     let mut function_call_output = String::from(f);
-    for arg in args.iter() {
+    for (arg, span) in args.iter() {
         function_call_output.push(' ');
-        let (normal_expr, run_before) = transpile_expr(arg, state)?;
+        let (normal_expr, run_before) = transpile_expr((arg, *span), state)?;
         if let Some(run) = run_before {
             output.push_str(&run);
             output.push('\n');
@@ -80,14 +105,17 @@ fn call_function(f: &str, args: &Vec<Expr>, state: &mut State) -> Result<String,
     Ok(output)
 }
 
-fn transpile_repr(expr: &Expr, state: &mut State) -> Result<(String, Option<String>), String> {
-    match expr {
+fn transpile_repr<'a>(
+    expr: Spanned<&'a Expr>,
+    state: &mut State,
+) -> Result<(String, Option<String>), Rich<'a, char>> {
+    match expr.0 {
         Expr::Call(f, args) => call_function(f, args, state).map(|v| (v, None)),
         Expr::Pipe(first, second) => {
-            let (mut output, mut run_before) = transpile_repr(first, state)?;
+            let (mut output, mut run_before) = transpile_repr((&first.0, first.1), state)?;
             output.push_str(" | ");
 
-            let (second_output, second_run_before) = transpile_repr(second, state)?;
+            let (second_output, second_run_before) = transpile_repr((&second.0, second.1), state)?;
             if let Some(run) = second_run_before {
                 run_before = Some(run_before.unwrap_or_default() + &run);
             }
@@ -95,7 +123,7 @@ fn transpile_repr(expr: &Expr, state: &mut State) -> Result<(String, Option<Stri
             output.push_str(&second_output);
             Ok((output, run_before))
         }
-        other => transpile_expr(other, state),
+        _ => transpile_expr(expr, state),
     }
 }
 
@@ -107,10 +135,10 @@ enum AssignmentType {
 fn assignment<'state, 'src: 'state>(
     ident: String,
     var_type: &Option<Type>,
-    value: &Expr,
+    value: Spanned<&'src Expr>,
     assignment_type: AssignmentType,
     state: &mut State<'state>,
-) -> Result<(String, Option<String>), String> {
+) -> Result<(String, Option<String>), Rich<'src, char>> {
     let mut output = match assignment_type {
         AssignmentType::Local => String::from("local "),
         AssignmentType::Global => String::new(),
@@ -119,11 +147,11 @@ fn assignment<'state, 'src: 'state>(
     output.push('=');
 
     if let Some(attempted_type) = var_type {
-        let expr_type = &value.get_type(state);
+        let expr_type = &value.0.get_type(state);
         if attempted_type != expr_type {
-            return Err(format!(
-                "Type {:?} does not match {:?}",
-                attempted_type, expr_type
+            return Err(Rich::custom(
+                value.1,
+                format!("Type {:?} does not match {:?}", attempted_type, expr_type),
             ));
         }
     }
@@ -143,22 +171,22 @@ fn assignment<'state, 'src: 'state>(
 }
 
 fn transpile<'state, 'src: 'state>(
-    statement: &'src Statement,
+    statement: &'src Spanned<Statement<'src>>,
     state: &mut State<'state>,
-) -> Result<(String, Option<String>), String> {
-    match statement {
-        Statement::Expression(expr) => transpile_repr(expr, state),
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    match &statement.0 {
+        Statement::Expression(expr) => transpile_repr((&expr.0, expr.1), state),
         Statement::Assignment(ident, var_type, value) => assignment(
             ident.to_string(),
             var_type,
-            value,
+            (&value.0, value.1),
             AssignmentType::Global,
             state,
         ),
         Statement::LocalAssignment(ident, var_type, value) => assignment(
             ident.to_string(),
             var_type,
-            value,
+            (&value.0, value.1),
             AssignmentType::Local,
             state,
         ),
@@ -192,28 +220,31 @@ fn transpile<'state, 'src: 'state>(
                 assignment(
                     format!("__{func_name}_return_value"),
                     &Some(return_type),
-                    value,
+                    (&value.0, value.1),
                     AssignmentType::Global,
                     state,
                 )
             } else {
-                Err(format!("{func_name} does not return a value"))
+                Err(Rich::custom(
+                    statement.1,
+                    format!("{func_name} does not return a value"),
+                ))
             }
         }
-        Statement::If(if_statement) => transpile_if(if_statement, state, true),
+        Statement::If(if_statement) => transpile_if((&if_statement.0, if_statement.1), state, true),
         Statement::Empty => Ok((String::new(), None)),
     }
 }
 
-fn transpile_condition(
-    condition: &Condition,
+fn transpile_condition<'src>(
+    condition: Spanned<&'src Condition>,
     state: &mut State,
-) -> Result<(String, Option<String>), String> {
-    match condition {
-        Condition::Expression(expr) => transpile_repr(expr, state),
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    match condition.0 {
+        Condition::Expression(expr) => transpile_repr((&expr.0, condition.1), state),
         Condition::Operator(op, expr1, expr2) => {
             let mut output = String::from("[ ");
-            let (new_output, mut run_before) = transpile_repr(expr1, state)?;
+            let (new_output, mut run_before) = transpile_repr((&expr1.0, condition.1), state)?;
             output.push_str(&new_output);
 
             output.push(' ');
@@ -229,7 +260,8 @@ fn transpile_condition(
             output.push_str(shell_op);
             output.push(' ');
 
-            let (second_output, second_run_before) = transpile_repr(expr2, state)?;
+            let (second_output, second_run_before) =
+                transpile_repr((&expr2.0, condition.1), state)?;
             if let Some(run) = second_run_before {
                 run_before = Some(run_before.unwrap_or_default() + &run);
             }
@@ -240,22 +272,23 @@ fn transpile_condition(
         }
         Condition::Not(cond) => {
             let mut output = String::from("not ");
-            let (new_output, run_before) = transpile_condition(cond, state)?;
+            let (new_output, run_before) = transpile_condition((cond, condition.1), state)?;
             output.push_str(&new_output);
             Ok((output, run_before))
         }
         Condition::InParens(cond) => {
             let mut output = String::from("(");
-            let (new_output, run_before) = transpile_condition(cond, state)?;
+            let (new_output, run_before) = transpile_condition((cond, condition.1), state)?;
             output.push_str(&new_output);
             output.push(')');
             Ok((output, run_before))
         }
         Condition::And(cond1, cond2) => {
-            let (mut output, mut run_before) = transpile_condition(cond1, state)?;
+            let (mut output, mut run_before) = transpile_condition((cond1, condition.1), state)?;
             output.push_str(" && ");
 
-            let (second_output, second_run_before) = transpile_condition(cond2, state)?;
+            let (second_output, second_run_before) =
+                transpile_condition((cond2, condition.1), state)?;
             if let Some(run) = second_run_before {
                 run_before = Some(run_before.unwrap_or_default() + &run);
             }
@@ -263,9 +296,10 @@ fn transpile_condition(
             Ok((output, run_before))
         }
         Condition::Or(cond1, cond2) => {
-            let (mut output, mut run_before) = transpile_condition(cond1, state)?;
+            let (mut output, mut run_before) = transpile_condition((cond1, condition.1), state)?;
             output.push_str(" || ");
-            let (second_output, second_run_before) = transpile_condition(cond2, state)?;
+            let (second_output, second_run_before) =
+                transpile_condition((cond2, condition.1), state)?;
             if let Some(run) = second_run_before {
                 run_before = Some(run_before.unwrap_or_default() + &run);
             }
@@ -276,16 +310,17 @@ fn transpile_condition(
 }
 
 fn transpile_if<'state, 'src: 'state>(
-    if_statement: &'src IfStatement,
+    if_statement: Spanned<&'src IfStatement>,
     state: &mut State<'state>,
     ends_if: bool,
-) -> Result<(String, Option<String>), String> {
+) -> Result<(String, Option<String>), Rich<'src, char>> {
     let mut output = String::from("if ");
-    let (new_output, run_before) = transpile_condition(&if_statement.cond, state)?;
+    let condition = &if_statement.0.cond;
+    let (new_output, run_before) = transpile_condition((&condition.0, condition.1), state)?;
     output.push_str(&new_output);
     output.push_str("; then\n");
-    output.push_str(&transpile_from_ast(&if_statement.statements, state)?);
-    if let Some(to_continue) = if_statement.continue_if.as_ref() {
+    output.push_str(&transpile_from_ast(&if_statement.0.statements, state)?);
+    if let Some(to_continue) = if_statement.0.continue_if.as_ref() {
         match to_continue {
             ContinueIfStatement::Else(statements) => {
                 output.push_str("else \n");
@@ -294,7 +329,7 @@ fn transpile_if<'state, 'src: 'state>(
             ContinueIfStatement::If(if_statement) => {
                 output.push_str("el");
                 // FIX: this (use else and then if prbly?)
-                output.push_str(&transpile_if(if_statement, state, false)?.0)
+                output.push_str(&transpile_if((&if_statement.0, if_statement.1), state, false)?.0)
             }
         }
     }
@@ -305,9 +340,9 @@ fn transpile_if<'state, 'src: 'state>(
 }
 
 pub fn transpile_from_ast<'state, 'src: 'state>(
-    conts: &'src Vec<Statement<'src>>,
+    conts: &'src Vec<Spanned<Statement<'src>>>,
     state: &mut State<'state>,
-) -> Result<String, String> {
+) -> Result<String, Rich<'src, char>> {
     let mut compiled = String::new();
     for expr in conts {
         let (output, run_before) = transpile(expr, state)?;

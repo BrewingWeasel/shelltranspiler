@@ -4,6 +4,7 @@ use chumsky::extra::Err;
 use chumsky::{prelude::*, Parser};
 
 pub type Span = SimpleSpan<usize>;
+pub type Spanned<T> = (T, Span);
 pub type ParseErr<'src> = Err<Rich<'src, char, Span>>;
 
 fn get_type<'src>() -> impl Parser<'src, &'src str, Type, ParseErr<'src>> + Clone {
@@ -15,10 +16,13 @@ fn get_type<'src>() -> impl Parser<'src, &'src str, Type, ParseErr<'src>> + Clon
 }
 
 fn type_assignment<'src>() -> impl Parser<'src, &'src str, Option<Type>, ParseErr<'src>> + Clone {
-    just(':').ignore_then(get_type()).or_not()
+    just(':')
+        .ignore_then(get_type())
+        .or_not()
+        .labelled("type assignment")
 }
 
-fn expression<'src>() -> impl Parser<'src, &'src str, Expr<'src>, ParseErr<'src>> + Clone {
+fn expression<'src>() -> impl Parser<'src, &'src str, Spanned<Expr<'src>>, ParseErr<'src>> + Clone {
     let ident = text::ident().padded();
     recursive(|expr| {
         let int = text::int(10)
@@ -52,20 +56,28 @@ fn expression<'src>() -> impl Parser<'src, &'src str, Expr<'src>, ParseErr<'src>
         recursive(|part| {
             let atom = choice((
                 int,
-                expr.delimited_by(just('('), just(')')),
+                expr.map(|(expr, _)| expr)
+                    .delimited_by(just('('), just(')')),
                 strvalue,
                 call_piped,
                 call,
                 var,
-            ));
+            ))
+            .map_with(|expr: Expr, e| -> Spanned<Expr> { (expr, e.span()) });
+
             atom.then(just("|>").padded().ignore_then(part).or_not())
-                .map(|(first, into_piped)| {
-                    if let Some(second) = into_piped {
-                        Expr::Pipe(Box::new(first), Box::new(second))
-                    } else {
-                        first
-                    }
-                })
+                .map(
+                    |(first, into_piped): (Spanned<Expr>, Option<Spanned<Expr>>)| {
+                        if let Some(second) = into_piped {
+                            (
+                                Expr::Pipe(Box::new(first.clone()), Box::new(second.clone())),
+                                first.1.union(second.1),
+                            )
+                        } else {
+                            first
+                        }
+                    },
+                )
         })
     })
 }
@@ -119,6 +131,7 @@ fn conditional<'src>() -> impl Parser<'src, &'src str, Condition<'src>, ParseErr
                     condition1
                 }
             })
+            .labelled("condition")
     })
 }
 
@@ -128,17 +141,29 @@ fn if_statement<'src>(
     recursive(|if_statement| {
         text::keyword("if")
             .padded()
-            .ignore_then(conditional())
+            .ignore_then(conditional().map_with(|cond, e| (cond, e.span())))
             .padded()
             .then_ignore(just('{'))
-            .then(statement.clone().repeated().collect::<Vec<_>>())
+            .then(
+                statement
+                    .clone()
+                    .map_with(|s, e| (s, e.span()))
+                    .repeated()
+                    .collect::<Vec<_>>(),
+            )
             .then_ignore(just('}'))
             .then(
                 text::keyword("else")
                     .padded()
                     .then(
                         if_statement.map(ContinueIfStatement::If).or(just('{')
-                            .ignore_then(statement.clone().repeated().collect())
+                            .ignore_then(
+                                statement
+                                    .clone()
+                                    .map_with(|s, e| (s, e.span()))
+                                    .repeated()
+                                    .collect(),
+                            )
                             .then_ignore(just('}'))
                             .map(ContinueIfStatement::Else)),
                     )
@@ -149,11 +174,13 @@ fn if_statement<'src>(
                 statements: body,
                 continue_if: Box::new(to_continue.map(|(_, v)| v)),
             })
+            .map_with(|if_statement, e| (if_statement, e.span()))
     })
-    .map(Statement::If)
+    .map(|(if_statement, span)| Statement::If((if_statement, span)))
 }
 
-pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<Statement<'src>>, ParseErr<'src>> {
+pub fn parser<'src>(
+) -> impl Parser<'src, &'src str, Vec<Spanned<Statement<'src>>>, ParseErr<'src>> + Clone {
     let ident = text::ident().padded();
 
     let statement = recursive(|statement| {
@@ -161,7 +188,8 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<Statement<'src>>, Pars
         let assignment = ident
             .then(type_assignment())
             .then_ignore(just('='))
-            .then(expr.clone());
+            .then(expr.clone())
+            .labelled("variable assignment");
 
         let comment = just('#')
             .then_ignore(any().filter(|c| *c != '\n').repeated())
@@ -180,7 +208,8 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<Statement<'src>>, Pars
         let return_statement = text::keyword("return")
             .padded()
             .ignore_then(expr.clone())
-            .map(Statement::Return);
+            .map(Statement::Return)
+            .labelled("return statement");
 
         let function = text::keyword("fun")
             .ignore_then(ident)
@@ -188,31 +217,45 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<Statement<'src>>, Pars
             .then(
                 ident
                     .then(type_assignment())
+                    .labelled("type")
                     .separated_by(just(','))
                     .allow_trailing()
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<_>>()
+                    .labelled("arguments"),
             )
             .then_ignore(just(')'))
             .padded()
             .then(just("->").padded().ignore_then(get_type()).or_not())
             .then_ignore(just('{'))
-            .then(statement.repeated().collect::<Vec<_>>())
+            .then(
+                statement
+                    .map_with(|s, e| (s, e.span()))
+                    .repeated()
+                    .collect::<Vec<_>>(),
+            )
             .then_ignore(just('}'))
             .map(|(((id, args), return_type), body)| {
                 Statement::Function(id, args, return_type, body)
-            });
+            })
+            .labelled("function");
 
-        local_assignment
-            .or(global_assignment)
-            .or(function)
-            .or(if_statement)
-            .or(return_statement)
-            .or(expr.map(Statement::Expression))
-            .or(comment.to(Statement::Empty))
-            .then_ignore(comment.or_not())
-            .then_ignore(just(';').ignored().or(text::newline()).or_not())
-            .padded()
+        choice((
+            function,
+            if_statement,
+            return_statement,
+            local_assignment,
+            global_assignment,
+            expr.map(Statement::Expression),
+            comment.to(Statement::Empty),
+        ))
+        .then_ignore(comment.or_not())
+        .then_ignore(just(';').ignored().or(text::newline()).or_not())
+        .padded()
     });
 
-    statement.repeated().collect().then_ignore(end())
+    statement
+        .map_with(|s, e| (s, e.span()))
+        .repeated()
+        .collect::<Vec<_>>()
+        .then_ignore(end())
 }

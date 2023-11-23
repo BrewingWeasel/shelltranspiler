@@ -44,7 +44,8 @@ fn expression<'src>() -> impl Parser<'src, &'src str, Spanned<Expr<'src>>, Parse
                 .separated_by(just(','))
                 .allow_trailing()
                 .collect::<Vec<_>>()
-                .delimited_by(just('('), just(')')),
+                .delimited_by(just('('), just(')'))
+                .map_with(|args, e| (args, e.span())),
         );
 
         let call_piped = just('<')
@@ -231,7 +232,8 @@ pub fn parser<'src>(
                 statement
                     .map_with(|s, e| (s, e.span()))
                     .repeated()
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<_>>()
+                    .map_with(|body, e| (body, e.span())),
             )
             .then_ignore(just('}'))
             .map(|(((id, args), return_type), body)| {

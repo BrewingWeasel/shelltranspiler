@@ -29,12 +29,12 @@ fn transpile_expr<'a>(
             }
             Ok((
                 format!("$__{func}_return_value"),
-                Some(call_function(func, args, state)?),
+                Some(call_function(func, (&args.0, args.1), state)?),
             ))
         }
         Expr::CallPiped(f, args) => {
             let mut output = String::from("$(");
-            output.push_str(&call_function(f, args, state)?);
+            output.push_str(&call_function(f, (&args.0, args.1), state)?);
             output.push(')');
             Ok((output, None))
         }
@@ -57,14 +57,15 @@ fn transpile_expr<'a>(
 
 fn call_function<'a>(
     f: &str,
-    args: &'a Vec<Spanned<Expr>>,
+    args: Spanned<&'a Vec<Spanned<Expr>>>,
     state: &mut State,
 ) -> Result<String, Rich<'a, char>> {
+    let (args, args_span) = args;
     let mut output = String::new();
     if let Some((actual_args, _return_type)) = state.get_func(f) {
         if args.len() != actual_args.len() {
             let span = match args.len() {
-                0 => unimplemented!(),
+                0 => args_span,
                 1 => args.first().unwrap().1,
                 _ => args.first().unwrap().1.union(args.last().unwrap().1),
             };
@@ -110,7 +111,7 @@ fn transpile_repr<'a>(
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'a, char>> {
     match expr.0 {
-        Expr::Call(f, args) => call_function(f, args, state).map(|v| (v, None)),
+        Expr::Call(f, args) => call_function(f, (&args.0, args.1), state).map(|v| (v, None)),
         Expr::Pipe(first, second) => {
             let (mut output, mut run_before) = transpile_repr((&first.0, first.1), state)?;
             output.push_str(" | ");
@@ -209,7 +210,7 @@ fn transpile<'state, 'src: 'state>(
 
             let mut output = String::from(*ident);
             output.push_str("() {\n");
-            output.push_str(&transpile_from_ast(conts, state)?);
+            output.push_str(&transpile_from_ast(&conts.0, state)?);
             output.push('}');
             state.end_scope();
             Ok((output, None))

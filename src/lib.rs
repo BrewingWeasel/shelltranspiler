@@ -18,7 +18,7 @@ enum Statement<'src> {
         &'src str,
         Vec<(&'src str, Option<Type>)>,
         Option<Type>,
-        Vec<Spanned<Statement<'src>>>,
+        Spanned<Vec<Spanned<Statement<'src>>>>,
     ),
     If(Spanned<IfStatement<'src>>),
     Return(Spanned<Expr<'src>>),
@@ -60,8 +60,8 @@ enum Expr<'src> {
     Num(f64),
     Str(String),
     Var(&'src str),
-    Call(&'src str, Vec<Spanned<Expr<'src>>>),
-    CallPiped(&'src str, Vec<Spanned<Expr<'src>>>),
+    Call(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
+    CallPiped(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
     Pipe(Box<Spanned<Expr<'src>>>, Box<Spanned<Expr<'src>>>),
 }
 

@@ -65,12 +65,17 @@ fn expression<'src>() -> impl Parser<'src, &'src str, Spanned<Expr<'src>>, Parse
                 expr.clone()
                     .map(|(expr, _)| expr)
                     .delimited_by(just('('), just(')')),
-                expr.separated_by(just(','))
+                expr.clone()
+                    .separated_by(just(','))
                     .allow_trailing()
                     .collect::<Vec<_>>()
                     .delimited_by(just('['), just(']'))
                     .map_with(|values, e| Expr::List((values, e.span())))
+                    // jasdlkfjasdklj
                     .padded(),
+                ident
+                    .then(expr.delimited_by(just('['), just(']')))
+                    .map(|(ident, expr)| Expr::ListIndex(ident, Box::new(expr))),
                 strvalue,
                 call_piped,
                 call,

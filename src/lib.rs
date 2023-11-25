@@ -63,9 +63,10 @@ enum ContinueIfStatement<'src> {
 
 #[derive(Debug, Clone)]
 enum Expr<'src> {
-    Num(f64),
+    Num(i64), // TODO: float
     Str(String),
     List(Spanned<Vec<Spanned<Expr<'src>>>>),
+    ListIndex(&'src str, Box<Spanned<Expr<'src>>>),
     Var(&'src str),
     Call(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
     CallPiped(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
@@ -82,6 +83,16 @@ impl<'src> Expr<'src> {
                     .map(|v| Box::new(v.0.get_type(state)))
                     .unwrap_or(Box::new(Type::Any)),
             ),
+            Self::ListIndex(name, _index) => state
+                .get_var(*name)
+                .map(|v| {
+                    if let Type::List(t) = v.1.as_ref().unwrap() {
+                        *t.clone()
+                    } else {
+                        Type::Any
+                    }
+                })
+                .unwrap_or(Type::Any),
             Self::Var(v) => state
                 .get_var(v)
                 .and_then(|var| var.1.clone())
@@ -99,12 +110,14 @@ impl<'src> Expr<'src> {
 #[derive(Debug, Clone)]
 struct State<'src> {
     scopes: Vec<Scope<'src>>,
+    list_num: usize,
 }
 
 impl<'src> State<'src> {
     fn new() -> Self {
         Self {
             scopes: vec![Scope::new("global")],
+            list_num: 0,
         }
     }
 
@@ -148,6 +161,11 @@ impl<'src> State<'src> {
         } else {
             String::new()
         }
+    }
+
+    fn new_list_pointer(&mut self) -> String {
+        self.list_num += 1;
+        format!("__list_{}", self.list_num)
     }
 }
 

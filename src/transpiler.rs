@@ -9,22 +9,45 @@ fn transpile_expr<'a>(
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'a, char>> {
     match expr.0 {
-        Expr::Num(x) => Ok((format!("'{x}'"), None)),
+        Expr::Num(x) => Ok((format!("{x}"), None)), // HACK: should have quotes but that breaks
+        // indexing
         Expr::Str(s) => Ok((format!("'{s}'"), None)),
         Expr::List(elements) => {
-            let (mut output, mut add_before) = (String::from("("), String::new());
-            for elem in &elements.0 {
+            let list_pointer = state.new_list_pointer();
+            let (mut output, mut add_before) = (String::new(), String::new());
+            for (i, &ref elem) in elements.0.iter().enumerate() {
                 let (new_output, new_add_before) = transpile_expr((&elem.0, elem.1), state)?;
                 if let Some(before) = new_add_before {
                     add_before.push_str(&before);
                     add_before.push('\n');
                 }
-                output.push_str(&new_output);
-                output.push(' ');
+                output.push_str(&format!("{list_pointer}_{i}={new_output}\n"));
                 // TODO: type checking
             }
-            output.push(')');
-            Ok((output, Some(add_before)))
+            add_before.push_str(&output);
+            Ok((format!("\"{list_pointer}\""), Some(add_before)))
+        }
+        Expr::ListIndex(list, expr) => {
+            let (output, run_before) = transpile_expr((&expr.0, expr.1), state)?;
+            if let Some((sh_variable_name, _type)) = state.get_var(list) {
+                let actual_type = expr.0.get_type(state);
+                if actual_type != Type::Num {
+                    return Err(Rich::custom(
+                        expr.1,
+                        format!("Only int works for indexing list, found {:?}", actual_type),
+                    ));
+                }
+
+                Ok((
+                    format!(
+                        r#""$(eval "echo \"\$$(echo "${}")_$(echo "{}")\"")""#,
+                        sh_variable_name, output
+                    ),
+                    run_before,
+                ))
+            } else {
+                Err(Rich::custom(expr.1, format!("Could not find list {list}")))
+            }
         }
         Expr::Var(s) => {
             if let Some((sh_variable_name, _type)) = state.get_var(s) {

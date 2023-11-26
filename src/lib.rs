@@ -25,6 +25,11 @@ enum Statement<'src> {
         Option<Type>,
         Spanned<Vec<Spanned<Statement<'src>>>>,
     ),
+    For(
+        &'src str,
+        Spanned<Expr<'src>>,
+        Spanned<Vec<Spanned<Statement<'src>>>>,
+    ),
     If(Spanned<IfStatement<'src>>),
     Return(Spanned<Expr<'src>>),
     Empty,
@@ -111,6 +116,7 @@ impl<'src> Expr<'src> {
 struct State<'src> {
     scopes: Vec<Scope<'src>>,
     list_num: usize,
+    times_ran_for_loop: usize,
 }
 
 impl<'src> State<'src> {
@@ -118,6 +124,7 @@ impl<'src> State<'src> {
         Self {
             scopes: vec![Scope::new("global")],
             list_num: 0,
+            times_ran_for_loop: 0,
         }
     }
 
@@ -166,6 +173,11 @@ impl<'src> State<'src> {
     fn new_list_pointer(&mut self) -> String {
         self.list_num += 1;
         format!("__list_{}", self.list_num)
+    }
+
+    fn new_for_loop_index(&mut self) -> String {
+        self.times_ran_for_loop += 1;
+        format!("__index_{}", self.times_ran_for_loop)
     }
 }
 

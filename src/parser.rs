@@ -203,6 +203,16 @@ pub fn parser<'src>(
 
     let statement = recursive(|statement| {
         let expr = expression();
+
+        let body = statement
+            .clone()
+            .map_with(|s, e| (s, e.span()))
+            .repeated()
+            .collect::<Vec<_>>()
+            .map_with(|body, e| (body, e.span()))
+            .delimited_by(just('{'), just('}'))
+            .padded();
+
         let assignment = ident
             .then(type_assignment())
             .then_ignore(just('='))
@@ -222,6 +232,17 @@ pub fn parser<'src>(
             assignment.map(|((id, var_type), val)| Statement::Assignment(id, var_type, val));
 
         let if_statement = if_statement(statement.clone());
+
+        let for_loop = text::keyword("for")
+            .padded()
+            .ignore_then(ident)
+            .padded()
+            .then_ignore(text::keyword("in"))
+            .padded()
+            .then(expr.clone())
+            .then(body.clone())
+            .labelled("for loop")
+            .map(|((var, loop_list), body)| Statement::For(var, loop_list, body));
 
         let return_statement = text::keyword("return")
             .padded()
@@ -244,15 +265,7 @@ pub fn parser<'src>(
             .then_ignore(just(')'))
             .padded()
             .then(just("->").padded().ignore_then(get_type()).or_not())
-            .then_ignore(just('{'))
-            .then(
-                statement
-                    .map_with(|s, e| (s, e.span()))
-                    .repeated()
-                    .collect::<Vec<_>>()
-                    .map_with(|body, e| (body, e.span())),
-            )
-            .then_ignore(just('}'))
+            .then(body)
             .map(|(((id, args), return_type), body)| {
                 Statement::Function(id, args, return_type, body)
             })
@@ -262,6 +275,7 @@ pub fn parser<'src>(
             function,
             if_statement,
             return_statement,
+            for_loop,
             local_assignment,
             global_assignment,
             expr.map(Statement::Expression),

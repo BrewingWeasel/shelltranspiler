@@ -281,6 +281,35 @@ fn transpile<'state, 'src: 'state>(
                 ))
             }
         }
+        Statement::For(var, loop_name, body) => {
+            if let Type::List(looped_item_type) = loop_name.0.get_type(state) {
+                let (list_refr, run_before) = transpile_repr((&loop_name.0, loop_name.1), state)?;
+                let index_value = state.new_for_loop_index();
+                let mut output = format!(
+                    r#"{}=0; while eval "{}=\"\${{$(echo {})_$(echo "${}")?unset}}\"" 2> /dev/null; do"#,
+                    &index_value, var, list_refr, &index_value
+                );
+                output.push('\n');
+                state
+                    .scopes
+                    .last_mut()
+                    .unwrap()
+                    .vars
+                    .insert(var.to_string(), (var.to_string(), Some(*looped_item_type)));
+                output.push_str(&transpile_from_ast(&body.0, state)?);
+                output.push_str(&format!(
+                    "\n{}=$(({} + 1))\ndone",
+                    &index_value, &index_value
+                ));
+                Ok((output, run_before))
+                // TODO:
+            } else {
+                Err(Rich::custom(
+                    loop_name.1,
+                    format!("{:?} does not return a list", loop_name.0),
+                ))
+            }
+        }
         Statement::If(if_statement) => transpile_if((&if_statement.0, if_statement.1), state),
         Statement::Empty => Ok((String::new(), None)),
     }

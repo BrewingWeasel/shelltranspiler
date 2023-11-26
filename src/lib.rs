@@ -11,8 +11,16 @@ mod transpiler;
 #[derive(Debug, Clone)]
 struct Function<'src> {
     args: &'src [(&'src str, Option<Type>)],
+    kwargs: &'src [Kwarg<'src>],
     return_value: Option<Type>,
     times_called: usize,
+}
+
+#[derive(Debug, Clone)]
+struct Kwarg<'src> {
+    ident: &'src str,
+    kwarg_type: Option<Type>,
+    default: Spanned<Expr<'src>>,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +31,7 @@ enum Statement<'src> {
     Function(
         &'src str,
         Vec<(&'src str, Option<Type>)>,
+        Vec<Kwarg<'src>>,
         Option<Type>,
         Spanned<Vec<Spanned<Statement<'src>>>>,
     ),
@@ -74,8 +83,16 @@ enum Expr<'src> {
     List(Spanned<Vec<Spanned<Expr<'src>>>>),
     ListIndex(&'src str, Box<Spanned<Expr<'src>>>),
     Var(&'src str),
-    Call(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
-    CallPiped(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
+    Call(
+        &'src str,
+        Spanned<Vec<Spanned<Expr<'src>>>>,
+        Spanned<Vec<(&'src str, Spanned<Expr<'src>>)>>,
+    ),
+    CallPiped(
+        &'src str,
+        Spanned<Vec<Spanned<Expr<'src>>>>,
+        Spanned<Vec<(&'src str, Spanned<Expr<'src>>)>>,
+    ),
     Pipe(Box<Spanned<Expr<'src>>>, Box<Spanned<Expr<'src>>>),
 }
 
@@ -103,11 +120,11 @@ impl<'src> Expr<'src> {
                 .get_var(v)
                 .and_then(|var| var.1.clone())
                 .unwrap_or(Type::Any),
-            Self::Call(func, _) => state
+            Self::Call(func, _, _) => state
                 .get_func(func)
                 .and_then(|func| func.return_value.clone())
                 .unwrap_or(Type::Any),
-            Self::CallPiped(_, _) => Type::Any,
+            Self::CallPiped(_, _, _) => Type::Any,
             Self::Pipe(_, expr) => expr.0.get_type(state),
         }
     }

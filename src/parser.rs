@@ -1,5 +1,5 @@
-use crate::Type;
 use crate::{Condition, ContinueIfStatement, Expr, IfStatement, Statement};
+use crate::{Kwarg, Type};
 use chumsky::extra::Err;
 use chumsky::{prelude::*, Parser};
 
@@ -49,15 +49,31 @@ fn expression<'src>() -> impl Parser<'src, &'src str, Spanned<Expr<'src>>, Parse
                 .separated_by(just(','))
                 .allow_trailing()
                 .collect::<Vec<_>>()
-                .delimited_by(just('('), just(')'))
-                .map_with(|args, e| (args, e.span())),
+                .map_with(|args, e| (args, e.span()))
+                .then(
+                    just('|')
+                        .padded()
+                        .ignore_then(
+                            ident
+                                .clone()
+                                .then_ignore(just('='))
+                                .then(expr.clone())
+                                .separated_by(just(','))
+                                .allow_trailing()
+                                .collect::<Vec<_>>(),
+                        )
+                        .or_not()
+                        .map_with(|kwargs, e| (kwargs.unwrap_or_default(), e.span())),
+                )
+                .delimited_by(just('('), just(')')),
         );
 
         let call_piped = just('<')
             .ignore_then(generic_call.clone())
             .padded()
-            .map(|(f, args)| Expr::CallPiped(f, args));
-        let call = generic_call.map(|(f, args)| Expr::Call(f, args));
+            .map(|(f, (args, kwargs))| Expr::CallPiped(f, args, kwargs));
+
+        let call = generic_call.map(|(f, (args, kwargs))| Expr::Call(f, args, kwargs));
 
         recursive(|part| {
             let atom = choice((
@@ -262,12 +278,36 @@ pub fn parser<'src>(
                     .collect::<Vec<_>>()
                     .labelled("arguments"),
             )
+            .then(
+                just('|')
+                    .padded()
+                    .ignore_then(
+                        ident
+                            .then(type_assignment())
+                            .padded()
+                            .labelled("type")
+                            .then_ignore(just('='))
+                            .padded()
+                            .then(expr.clone())
+                            .map(|((ident, kwarg_type), default)| Kwarg {
+                                ident,
+                                kwarg_type,
+                                default,
+                            })
+                            .separated_by(just(','))
+                            .allow_trailing()
+                            .collect::<Vec<_>>()
+                            .labelled("optional arguments"),
+                    )
+                    .or_not()
+                    .map(|kwargs| kwargs.unwrap_or_default()),
+            )
             .then_ignore(just(')'))
             .padded()
             .then(just("->").padded().ignore_then(get_type()).or_not())
             .then(body)
-            .map(|(((id, args), return_type), body)| {
-                Statement::Function(id, args, return_type, body)
+            .map(|((((id, args), kwargs), return_type), body)| {
+                Statement::Function(id, args, kwargs, return_type, body)
             })
             .labelled("function");
 

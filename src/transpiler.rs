@@ -56,7 +56,7 @@ fn transpile_expr<'a>(
                 Err(Rich::custom(expr.1, format!("Could not find variable {s}")))
             }
         }
-        Expr::Call(func, args) => {
+        Expr::Call(func, args, kwargs) => {
             if let Some(f) = state.get_func(func) {
                 if f.return_value.is_none() {
                     return Err(Rich::custom(
@@ -68,12 +68,22 @@ fn transpile_expr<'a>(
             let var_name = format!("$__{func}_return_value_{}", state.get_times_called(func));
             Ok((
                 var_name,
-                Some(call_function(func, (&args.0, args.1), state)?),
+                Some(call_function(
+                    func,
+                    (&args.0, args.1),
+                    (&kwargs.0, kwargs.1),
+                    state,
+                )?),
             ))
         }
-        Expr::CallPiped(f, args) => {
+        Expr::CallPiped(f, args, kwargs) => {
             let mut output = String::from("$(");
-            output.push_str(&call_function(f, (&args.0, args.1), state)?);
+            output.push_str(&call_function(
+                f,
+                (&args.0, args.1),
+                (&kwargs.0, kwargs.1),
+                state,
+            )?);
             output.push(')');
             Ok((output, None))
         }
@@ -97,9 +107,11 @@ fn transpile_expr<'a>(
 fn call_function<'a>(
     f: &str,
     args: Spanned<&'a Vec<Spanned<Expr>>>,
+    kwargs: Spanned<&'a Vec<(&'a str, Spanned<Expr>)>>,
     state: &mut State,
 ) -> Result<String, Rich<'a, char>> {
     let (args, args_span) = args;
+    let (kwargs, _kwargs_span) = kwargs;
     let mut output = String::new();
     if let Some(func) = state.get_func(f) {
         if args.len() != func.args.len() {
@@ -116,6 +128,32 @@ fn call_function<'a>(
                     args.len()
                 ),
             ));
+        }
+        for (kwarg_ident, (expr, span)) in kwargs.iter() {
+            let mut known_kwarg = false;
+            for real_kwarg in func.kwargs {
+                if &real_kwarg.ident == kwarg_ident {
+                    if let Some(expected_type) = &real_kwarg.kwarg_type {
+                        if expected_type != &expr.get_type(state) {
+                            return Err(Rich::custom(
+                                *span,
+                                format!(
+                                    "Expected {:?} to match the type of {:?}",
+                                    expr.get_type(state),
+                                    expected_type
+                                ),
+                            ));
+                        }
+                    }
+                    known_kwarg = true;
+                }
+            }
+            if !known_kwarg {
+                return Err(Rich::custom(
+                    *span,
+                    format!("Kwarg {} not found", &kwarg_ident,),
+                ));
+            }
         }
         for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(func.args.iter()) {
             if let Some(arg_type) = possible_arg_type {
@@ -134,6 +172,15 @@ fn call_function<'a>(
     let mut function_call_output = String::from(f);
     function_call_output.push(' ');
     function_call_output.push_str(&state.get_times_called(f));
+    for (kwarg, (expr, span)) in kwargs.iter() {
+        function_call_output.push_str(&format!(" --{kwarg} "));
+        let (normal_expr, run_before) = transpile_expr((expr, *span), state)?;
+        if let Some(run) = run_before {
+            output.push_str(&run);
+            output.push('\n');
+        }
+        function_call_output.push_str(&normal_expr);
+    }
     for (arg, span) in args.iter() {
         function_call_output.push(' ');
         let (normal_expr, run_before) = transpile_expr((arg, *span), state)?;
@@ -153,7 +200,9 @@ fn transpile_repr<'a>(
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'a, char>> {
     match expr.0 {
-        Expr::Call(f, args) => call_function(f, (&args.0, args.1), state).map(|v| (v, None)),
+        Expr::Call(f, args, kwargs) => {
+            call_function(f, (&args.0, args.1), (&kwargs.0, kwargs.1), state).map(|v| (v, None))
+        }
         Expr::Pipe(first, second) => {
             let (mut output, mut run_before) = transpile_repr((&first.0, first.1), state)?;
             output.push_str(" | ");
@@ -233,11 +282,12 @@ fn transpile<'state, 'src: 'state>(
             AssignmentType::Local,
             state,
         ),
-        Statement::Function(ident, args, return_value, conts) => {
+        Statement::Function(ident, args, kwargs, return_value, conts) => {
             state.scopes.first_mut().unwrap().functions.insert(
                 ident.to_owned(),
                 crate::Function {
                     args,
+                    kwargs,
                     return_value: return_value.to_owned(),
                     times_called: 0,
                 },
@@ -249,11 +299,57 @@ fn transpile<'state, 'src: 'state>(
                     .last_mut()
                     .unwrap()
                     .vars
-                    .insert(arg.to_string(), ((i + 2).to_string(), arg_type.to_owned()));
+                    .insert(arg.to_string(), ((i + 1).to_string(), arg_type.to_owned()));
             }
 
             let mut output = String::from(*ident);
-            output.push_str("() {\n");
+            output.push_str(
+                "() {
+__n_timecalled=$1
+",
+            );
+            if !kwargs.is_empty() {
+                let mut case_statement = String::from(
+                    "shift
+while test $# -gt 0; do
+case \"$1\" in
+",
+                );
+
+                for kwarg in kwargs {
+                    let (default_assignment, run_before) = assignment(
+                        kwarg.ident.to_owned(),
+                        &kwarg.kwarg_type,
+                        (&kwarg.default.0, kwarg.default.1),
+                        AssignmentType::Local,
+                        state,
+                    )?;
+                    output.push_str(&default_assignment);
+                    output.push('\n');
+                    if let Some(before) = run_before {
+                        output.push_str(&before);
+                        output.push('\n');
+                    }
+                    case_statement.push_str(&format!(
+                        r#"--{})
+shift
+export {}="$1"
+shift
+;;
+"#,
+                        kwarg.ident, kwarg.ident
+                    ));
+                }
+                case_statement.push_str(
+                    r#"*)
+break
+;;
+esac
+done
+"#,
+                );
+                output.push_str(&case_statement);
+            }
             output.push_str(&transpile_from_ast(&conts.0, state)?);
             output.push('}');
             state.end_scope();
@@ -270,7 +366,7 @@ fn transpile<'state, 'src: 'state>(
                     state,
                 )?;
                 output.push_str(&format!(
-                    "\neval \"__{func_name}_return_value_$1=\\\"$__return_val\\\"\""
+                    "\neval \"__{func_name}_return_value_$__n_timecalled=\\\"$__return_val\\\"\""
                 ));
                 output.push_str("\nreturn 0");
                 Ok((output, run_before))

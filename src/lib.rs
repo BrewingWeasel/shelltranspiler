@@ -26,8 +26,8 @@ struct Kwarg<'src> {
 #[derive(Debug, Clone)]
 enum Statement<'src> {
     Expression(Spanned<Expr<'src>>),
-    Assignment(&'src str, Option<Type>, Spanned<Expr<'src>>),
-    LocalAssignment(&'src str, Option<Type>, Spanned<Expr<'src>>),
+    Assignment(bool, &'src str, Option<Type>, Spanned<Expr<'src>>),
+    LocalAssignment(bool, &'src str, Option<Type>, Spanned<Expr<'src>>),
     Function(
         &'src str,
         Vec<(&'src str, Option<Type>)>,
@@ -110,7 +110,7 @@ impl<'src> Expr<'src> {
                     .map_or(Box::new(Type::Any), |v| Box::new(v.0.get_type(state))),
             ),
             Self::ListIndex(name, _index) => state.get_var(name).map_or(Type::Any, |v| {
-                if let Type::List(t) = v.1.as_ref().unwrap() {
+                if let Type::List(t) = &v.1 {
                     *t.clone()
                 } else {
                     Type::Any
@@ -118,7 +118,7 @@ impl<'src> Expr<'src> {
             }),
             Self::Var(v) => state
                 .get_var(v)
-                .and_then(|var| var.1.clone())
+                .map(|var| var.1.clone())
                 .unwrap_or(Type::Any),
             Self::Call(func, _, _) => state
                 .get_func(func)
@@ -154,7 +154,7 @@ impl<'src> State<'src> {
         self.scopes.pop();
     }
 
-    fn get_var(&'src self, variable_name: &str) -> Option<&(String, Option<Type>)> {
+    fn get_var(&'src self, variable_name: &str) -> Option<&(String, Type)> {
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.vars.get(variable_name) {
                 return Some(real_var);
@@ -198,7 +198,7 @@ impl<'src> State<'src> {
 
 #[derive(Debug, Clone)]
 struct Scope<'src> {
-    vars: HashMap<String, (String, Option<Type>)>,
+    vars: HashMap<String, (String, Type)>,
     functions: HashMap<&'src str, Function<'src>>,
     name: &'src str,
 }

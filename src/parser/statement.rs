@@ -66,7 +66,10 @@ pub fn parse_statement<'src>(
             .delimited_by(just('{'), just('}'))
             .padded();
 
-        let assignment = ident
+        let assignment = text::keyword("var")
+            .or_not()
+            .map(|v| v.is_some())
+            .then(ident)
             .then(type_assignment())
             .then_ignore(just('='))
             .then(expr.clone())
@@ -79,10 +82,13 @@ pub fn parse_statement<'src>(
         let local_assignment = text::keyword("local")
             .padded()
             .ignore_then(assignment.clone())
-            .map(|((id, var_type), val)| Statement::LocalAssignment(id, var_type, val));
+            .map(|(((first_assignment, id), var_type), val)| {
+                Statement::LocalAssignment(first_assignment, id, var_type, val)
+            });
 
-        let global_assignment =
-            assignment.map(|((id, var_type), val)| Statement::Assignment(id, var_type, val));
+        let global_assignment = assignment.map(|(((first_assignment, id), var_type), val)| {
+            Statement::Assignment(first_assignment, id, var_type, val)
+        });
 
         let if_statement = if_statement(statement.clone());
 

@@ -13,14 +13,16 @@ pub fn transpile_statement<'state, 'src: 'state>(
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     match &statement.0 {
         Statement::Expression(expr) => transpile_repr((&expr.0, expr.1), state),
-        Statement::Assignment(ident, var_type, value) => assignment(
+        Statement::Assignment(first_assignment, ident, var_type, value) => assignment(
+            *first_assignment,
             (*ident).to_string(),
             var_type,
             (&value.0, value.1),
             AssignmentType::Global,
             state,
         ),
-        Statement::LocalAssignment(ident, var_type, value) => assignment(
+        Statement::LocalAssignment(first_assignment, ident, var_type, value) => assignment(
+            *first_assignment,
             (*ident).to_string(),
             var_type,
             (&value.0, value.1),
@@ -41,7 +43,7 @@ pub fn transpile_statement<'state, 'src: 'state>(
             for (i, (arg, arg_type)) in args.iter().enumerate() {
                 state.scopes.last_mut().unwrap().vars.insert(
                     (*arg).to_string(),
-                    ((i + 1).to_string(), arg_type.to_owned()),
+                    ((i + 1).to_string(), arg_type.clone().unwrap_or(Type::Any)),
                 );
             }
 
@@ -60,9 +62,8 @@ case \"$1\" in
                 );
 
                 for kwarg in kwargs {
-                    let (default_assignment, run_before) = assignment(
+                    let (default_assignment, run_before) = raw_assignment(
                         kwarg.ident.to_owned(),
-                        &kwarg.kwarg_type,
                         (&kwarg.default.0, kwarg.default.1),
                         AssignmentType::Local,
                         state,
@@ -100,10 +101,9 @@ done
         }
         Statement::Return(value) => {
             let func_name = state.scopes.last().unwrap().name;
-            if let Some(return_type) = state.get_func(func_name).unwrap().return_value.clone() {
-                let (mut output, run_before) = assignment(
+            if let Some(_return_type) = state.get_func(func_name).unwrap().return_value.clone() {
+                let (mut output, run_before) = raw_assignment(
                     "__return_val".to_string(),
-                    &Some(return_type),
                     (&value.0, value.1),
                     AssignmentType::Global,
                     state,
@@ -129,10 +129,12 @@ done
                     &index_value, var, list_refr, &index_value
                 );
                 output.push('\n');
-                state.scopes.last_mut().unwrap().vars.insert(
-                    (*var).to_string(),
-                    ((*var).to_string(), Some(*looped_item_type)),
-                );
+                state
+                    .scopes
+                    .last_mut()
+                    .unwrap()
+                    .vars
+                    .insert((*var).to_string(), ((*var).to_string(), *looped_item_type));
                 output.push_str(&transpile_from_ast(&body.0, state)?);
                 output.push_str(&format!(
                     "\n{}=$(({} + 1))\ndone",
@@ -198,9 +200,8 @@ pub enum AssignmentType {
     Global,
 }
 
-pub fn assignment<'state, 'src: 'state>(
+pub fn raw_assignment<'state, 'src: 'state>(
     ident: String,
-    var_type: &Option<Type>,
     value: Spanned<&'src Expr>,
     assignment_type: AssignmentType,
     state: &mut State<'state>,
@@ -211,9 +212,21 @@ pub fn assignment<'state, 'src: 'state>(
     };
     output.push_str(&ident);
     output.push('=');
+    let (new_output, run_before) = transpile_expr(value, state)?;
+    output.push_str(&new_output);
+    Ok((output, run_before))
+}
 
+pub fn assignment<'state, 'src: 'state>(
+    first_assignment: bool,
+    ident: String,
+    var_type: &Option<Type>,
+    value: Spanned<&'src Expr>,
+    assignment_type: AssignmentType,
+    state: &mut State<'state>,
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    let expr_type = &value.0.get_type(state);
     if let Some(attempted_type) = var_type {
-        let expr_type = &value.0.get_type(state);
         if attempted_type != expr_type {
             return Err(Rich::custom(
                 value.1,
@@ -222,16 +235,43 @@ pub fn assignment<'state, 'src: 'state>(
         }
     }
 
-    let (new_output, run_before) = transpile_expr(value, state)?;
-    output.push_str(&new_output);
+    if let Some(var) = state.get_var(&ident) {
+        if first_assignment {
+            return Err(Rich::custom(
+                value.1,
+                format!("Variable {ident} already exists, shadowing is not supported (yet?)",),
+            ));
+        }
+        if &var.1 != expr_type {
+            return Err(Rich::custom(
+                value.1,
+                format!(
+                    "Mismatched types: expected {:?} but found {:?}",
+                    var.1, expr_type
+                ),
+            ));
+        }
+    } else {
+        if !first_assignment {
+            return Err(Rich::custom(
+                value.1,
+                format!(
+                    "Variable {} does not exist yet, maybe you meant to put var in front?",
+                    ident
+                ),
+            ));
+        }
+    }
 
     let scope = match assignment_type {
         AssignmentType::Local => state.scopes.last_mut(),
         AssignmentType::Global => state.scopes.first_mut(),
     };
+
     scope
         .unwrap()
         .vars
-        .insert(ident.clone(), (ident, var_type.to_owned()));
-    Ok((output, run_before))
+        .insert(ident.clone(), (ident.clone(), expr_type.clone()));
+
+    Ok(raw_assignment(ident, value, assignment_type, state)?)
 }

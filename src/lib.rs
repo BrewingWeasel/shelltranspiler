@@ -1,5 +1,6 @@
 use crate::parser::parser;
-use chumsky::{prelude::Rich, span::SimpleSpan, Parser};
+use ariadne::{sources, Color, Label, Report, ReportKind};
+use chumsky::{prelude::Rich, Parser};
 use parser::Spanned;
 use std::collections::HashMap;
 use transpiler::transpile_from_ast;
@@ -198,11 +199,41 @@ impl<'src> Scope<'src> {
     }
 }
 
-pub fn transpile_from_string(input: &str) -> Result<String, Vec<Rich<char>>> {
+fn show_err(err: Rich<'_, char>, filename: String, src: &str) {
+    Report::build(ReportKind::Error, filename.clone(), err.span().start)
+        .with_message(err.to_string())
+        .with_label(
+            Label::new((filename.clone(), err.span().into_range()))
+                .with_message(err.reason().to_string())
+                .with_color(Color::Red),
+        )
+        .with_labels(err.contexts().map(|(label, span)| {
+            Label::new((filename.clone(), span.into_range()))
+                .with_message(format!("while parsing this {}", label))
+                .with_color(Color::Yellow)
+        }))
+        .finish()
+        .print(sources([(filename, src)]))
+        .unwrap()
+}
+
+pub fn transpile_from_file(filename: String) -> Option<String> {
+    let src = std::fs::read_to_string(&filename).unwrap();
     let mut state = State::new();
-    match parser().parse(input).into_result() {
-        Ok(ast) => transpile_from_ast(&ast, &mut state)
-            .map_err(|e| vec![Rich::custom(SimpleSpan::new(0, 4), e)]),
-        Err(parse_errs) => Err(parse_errs),
-    }
+
+    match parser().parse(&src).into_result() {
+        Ok(ast) => match transpile_from_ast(&ast, &mut state) {
+            Ok(output) => return Some(output),
+            Err(err) => {
+                show_err(err, filename.clone(), &src);
+            }
+        },
+        Err(errors) => {
+            for err in errors {
+                show_err(err, filename.clone(), &src);
+            }
+        }
+    };
+
+    return None;
 }

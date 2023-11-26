@@ -27,13 +27,13 @@ fn transpile_expr<'a>(
             add_before.push_str(&output);
             Ok((format!("\"{list_pointer}\""), Some(add_before)))
         }
-        Expr::ListIndex(list, expr) => {
-            let (output, run_before) = transpile_expr((&expr.0, expr.1), state)?;
+        Expr::ListIndex(list, index) => {
+            let (output, run_before) = transpile_expr((&index.0, index.1), state)?;
             if let Some((sh_variable_name, _type)) = state.get_var(list) {
-                let actual_type = expr.0.get_type(state);
+                let actual_type = index.0.get_type(state);
                 if actual_type != Type::Num {
                     return Err(Rich::custom(
-                        expr.1,
+                        index.1,
                         format!("Only int works for indexing list, found {:?}", actual_type),
                     ));
                 }

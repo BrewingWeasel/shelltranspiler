@@ -49,12 +49,12 @@ pub fn transpile_statement<'state, 'src: 'state>(
             output.push_str(
                 "() {
 __n_timecalled=$1
+shift
 ",
             );
             if !kwargs.is_empty() {
                 let mut case_statement = String::from(
-                    "shift
-while test $# -gt 0; do
+                    "while test $# -gt 0; do
 case \"$1\" in
 ",
                 );
@@ -146,6 +146,15 @@ done
                     format!("{:?} does not return a list", loop_name.0),
                 ))
             }
+        }
+        Statement::While(condition, body) => {
+            let mut output = String::from("while ");
+            let (new_output, run_before) = transpile_condition((&condition.0, condition.1), state)?;
+            output.push_str(&new_output);
+            output.push_str("; do\n");
+            output.push_str(&transpile_from_ast(&body.0, state)?);
+            output.push_str("\ndone");
+            Ok((output, run_before))
         }
         Statement::If(if_statement) => transpile_if((&if_statement.0, if_statement.1), state),
         Statement::Empty => Ok((String::new(), None)),

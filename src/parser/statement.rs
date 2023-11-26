@@ -97,6 +97,13 @@ pub fn parse_statement<'src>(
             .labelled("for loop")
             .map(|((var, loop_list), body)| Statement::For(var, loop_list, body));
 
+        let while_loop = text::keyword("while")
+            .padded()
+            .ignore_then(conditional().map_with(|cond, e| (cond, e.span())))
+            .then(body.clone())
+            .labelled("while loop")
+            .map(|(condition, body)| Statement::While(condition, body));
+
         let return_statement = text::keyword("return")
             .padded()
             .ignore_then(expr.clone())
@@ -153,6 +160,7 @@ pub fn parse_statement<'src>(
             if_statement,
             return_statement,
             for_loop,
+            while_loop,
             local_assignment,
             global_assignment,
             expr.map(Statement::Expression),

@@ -40,6 +40,10 @@ enum Statement<'src> {
         Spanned<Expr<'src>>,
         Spanned<Vec<Spanned<Statement<'src>>>>,
     ),
+    While(
+        Spanned<Condition<'src>>,
+        Spanned<Vec<Spanned<Statement<'src>>>>,
+    ),
     If(Spanned<IfStatement<'src>>),
     Return(Spanned<Expr<'src>>),
     Empty,

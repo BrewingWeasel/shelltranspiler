@@ -60,7 +60,7 @@ struct IfStatement<'a> {
     continue_if: Box<Option<ContinueIfStatement<'a>>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Condition<'src> {
     Expression(Spanned<Expr<'src>>),
     Operator(&'src str, Spanned<Expr<'src>>, Spanned<Expr<'src>>),
@@ -76,7 +76,7 @@ enum ContinueIfStatement<'src> {
     Else(Vec<Spanned<Statement<'src>>>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Expr<'src> {
     Num(i64), // TODO: float
     Str(String),

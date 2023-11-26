@@ -65,7 +65,7 @@ fn main() {
                     print!("{output}");
                 }
                 fs::write(
-                    out_file.unwrap_or(PathBuf::from(file.with_extension("sh"))),
+                    out_file.unwrap_or_else(|| file.with_extension("sh")),
                     output,
                 )
                 .expect("Unable to write to the file");

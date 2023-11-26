@@ -2,7 +2,7 @@ use crate::parser::parser;
 use ariadne::{sources, Color, Label, Report, ReportKind};
 use chumsky::{prelude::Rich, Parser};
 use parser::Spanned;
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, process::exit};
 use transpiler::transpile_from_ast;
 
 mod parser;
@@ -103,19 +103,15 @@ impl<'src> Expr<'src> {
             Self::Str(_) => Type::Str,
             Self::List(v) => Type::List(
                 v.0.first()
-                    .map(|v| Box::new(v.0.get_type(state)))
-                    .unwrap_or(Box::new(Type::Any)),
+                    .map_or(Box::new(Type::Any), |v| Box::new(v.0.get_type(state))),
             ),
-            Self::ListIndex(name, _index) => state
-                .get_var(*name)
-                .map(|v| {
-                    if let Type::List(t) = v.1.as_ref().unwrap() {
-                        *t.clone()
-                    } else {
-                        Type::Any
-                    }
-                })
-                .unwrap_or(Type::Any),
+            Self::ListIndex(name, _index) => state.get_var(name).map_or(Type::Any, |v| {
+                if let Type::List(t) = v.1.as_ref().unwrap() {
+                    *t.clone()
+                } else {
+                    Type::Any
+                }
+            }),
             Self::Var(v) => state
                 .get_var(v)
                 .and_then(|var| var.1.clone())
@@ -147,7 +143,7 @@ impl<'src> State<'src> {
     }
 
     fn new_scope(&mut self, name: &'src str) {
-        self.scopes.push(Scope::new(name))
+        self.scopes.push(Scope::new(name));
     }
 
     fn end_scope(&mut self) {
@@ -181,11 +177,8 @@ impl<'src> State<'src> {
     }
 
     fn get_times_called(&self, function: &str) -> String {
-        if let Some(f) = self.get_func(function) {
-            f.times_called.to_string()
-        } else {
-            String::new()
-        }
+        self.get_func(function)
+            .map_or_else(String::new, |f| f.times_called.to_string())
     }
 
     fn new_list_pointer(&mut self) -> String {
@@ -216,7 +209,7 @@ impl<'src> Scope<'src> {
     }
 }
 
-fn show_err(err: Rich<'_, char>, filename: String, src: &str) {
+fn show_err(err: &Rich<'_, char>, filename: String, src: &str) {
     Report::build(ReportKind::Error, filename.clone(), err.span().start)
         .with_message(err.to_string())
         .with_label(
@@ -226,31 +219,35 @@ fn show_err(err: Rich<'_, char>, filename: String, src: &str) {
         )
         .with_labels(err.contexts().map(|(label, span)| {
             Label::new((filename.clone(), span.into_range()))
-                .with_message(format!("while parsing this {}", label))
+                .with_message(format!("while parsing this {label}"))
                 .with_color(Color::Yellow)
         }))
         .finish()
         .print(sources([(filename, src)]))
-        .unwrap()
+        .unwrap();
 }
 
+#[must_use]
 pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
-    let src = std::fs::read_to_string(filename).unwrap();
+    let Ok(src) = std::fs::read_to_string(filename) else {
+        eprintln!("Unable to read file {}", filename.to_string_lossy());
+        exit(1);
+    };
     let mut state = State::new();
 
     match parser().parse(&src).into_result() {
         Ok(ast) => match transpile_from_ast(&ast, &mut state) {
             Ok(output) => return Some(output),
             Err(err) => {
-                show_err(err, filename.to_string_lossy().to_string(), &src);
+                show_err(&err, filename.to_string_lossy().to_string(), &src);
             }
         },
         Err(errors) => {
             for err in errors {
-                show_err(err, filename.to_string_lossy().to_string(), &src);
+                show_err(&err, filename.to_string_lossy().to_string(), &src);
             }
         }
     };
 
-    return None;
+    None
 }

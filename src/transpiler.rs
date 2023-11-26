@@ -15,7 +15,7 @@ fn transpile_expr<'a>(
         Expr::List(elements) => {
             let list_pointer = state.new_list_pointer();
             let (mut output, mut add_before) = (String::new(), String::new());
-            for (i, &ref elem) in elements.0.iter().enumerate() {
+            for (i, elem) in elements.0.iter().enumerate() {
                 let (new_output, new_add_before) = transpile_expr((&elem.0, elem.1), state)?;
                 if let Some(before) = new_add_before {
                     add_before.push_str(&before);
@@ -34,14 +34,13 @@ fn transpile_expr<'a>(
                 if actual_type != Type::Num {
                     return Err(Rich::custom(
                         index.1,
-                        format!("Only int works for indexing list, found {:?}", actual_type),
+                        format!("Only int works for indexing list, found {actual_type:?}"),
                     ));
                 }
 
                 Ok((
                     format!(
-                        r#""$(eval "echo \"\$$(echo "${}")_$(echo "{}")\"")""#,
-                        sh_variable_name, output
+                        r#""$(eval "echo \"\$$(echo "${sh_variable_name}")_$(echo "{output}")\"")""#
                     ),
                     run_before,
                 ))
@@ -129,7 +128,7 @@ fn call_function<'a>(
                 ),
             ));
         }
-        for (kwarg_ident, (expr, span)) in kwargs.iter() {
+        for (kwarg_ident, (expr, span)) in kwargs {
             let mut known_kwarg = false;
             for real_kwarg in func.kwargs {
                 if &real_kwarg.ident == kwarg_ident {
@@ -160,10 +159,7 @@ fn call_function<'a>(
                 if &arg.get_type(state) != arg_type {
                     return Err(Rich::custom(
                         *span,
-                        format!(
-                            "Expected {:?} to match the type of {arg_name} ({:?})",
-                            arg, arg_type
-                        ),
+                        format!("Expected {arg:?} to match the type of {arg_name} ({arg_type:?})"),
                     ));
                 }
             }
@@ -172,7 +168,7 @@ fn call_function<'a>(
     let mut function_call_output = String::from(f);
     function_call_output.push(' ');
     function_call_output.push_str(&state.get_times_called(f));
-    for (kwarg, (expr, span)) in kwargs.iter() {
+    for (kwarg, (expr, span)) in kwargs {
         function_call_output.push_str(&format!(" --{kwarg} "));
         let (normal_expr, run_before) = transpile_expr((expr, *span), state)?;
         if let Some(run) = run_before {
@@ -181,7 +177,7 @@ fn call_function<'a>(
         }
         function_call_output.push_str(&normal_expr);
     }
-    for (arg, span) in args.iter() {
+    for (arg, span) in args {
         function_call_output.push(' ');
         let (normal_expr, run_before) = transpile_expr((arg, *span), state)?;
         if let Some(run) = run_before {
@@ -219,6 +215,7 @@ fn transpile_repr<'a>(
     }
 }
 
+#[derive(Clone, Copy)]
 enum AssignmentType {
     Local,
     Global,
@@ -243,7 +240,7 @@ fn assignment<'state, 'src: 'state>(
         if attempted_type != expr_type {
             return Err(Rich::custom(
                 value.1,
-                format!("Type {:?} does not match {:?}", attempted_type, expr_type),
+                format!("Type {attempted_type:?} does not match {expr_type:?}"),
             ));
         }
     }
@@ -253,7 +250,7 @@ fn assignment<'state, 'src: 'state>(
 
     let scope = match assignment_type {
         AssignmentType::Local => state.scopes.last_mut(),
-        AssignmentType::Global => state.scopes.last_mut(),
+        AssignmentType::Global => state.scopes.first_mut(),
     };
     scope
         .unwrap()
@@ -269,14 +266,14 @@ fn transpile<'state, 'src: 'state>(
     match &statement.0 {
         Statement::Expression(expr) => transpile_repr((&expr.0, expr.1), state),
         Statement::Assignment(ident, var_type, value) => assignment(
-            ident.to_string(),
+            (*ident).to_string(),
             var_type,
             (&value.0, value.1),
             AssignmentType::Global,
             state,
         ),
         Statement::LocalAssignment(ident, var_type, value) => assignment(
-            ident.to_string(),
+            (*ident).to_string(),
             var_type,
             (&value.0, value.1),
             AssignmentType::Local,
@@ -294,12 +291,10 @@ fn transpile<'state, 'src: 'state>(
             );
             state.new_scope(ident);
             for (i, (arg, arg_type)) in args.iter().enumerate() {
-                state
-                    .scopes
-                    .last_mut()
-                    .unwrap()
-                    .vars
-                    .insert(arg.to_string(), ((i + 1).to_string(), arg_type.to_owned()));
+                state.scopes.last_mut().unwrap().vars.insert(
+                    (*arg).to_string(),
+                    ((i + 1).to_string(), arg_type.to_owned()),
+                );
             }
 
             let mut output = String::from(*ident);
@@ -341,12 +336,12 @@ shift
                     ));
                 }
                 case_statement.push_str(
-                    r#"*)
+                    r"*)
 break
 ;;
 esac
 done
-"#,
+",
                 );
                 output.push_str(&case_statement);
             }
@@ -359,7 +354,7 @@ done
             let func_name = state.scopes.last().unwrap().name;
             if let Some(return_type) = state.get_func(func_name).unwrap().return_value.clone() {
                 let (mut output, run_before) = assignment(
-                    format!("__return_val"),
+                    "__return_val".to_string(),
                     &Some(return_type),
                     (&value.0, value.1),
                     AssignmentType::Global,
@@ -386,12 +381,10 @@ done
                     &index_value, var, list_refr, &index_value
                 );
                 output.push('\n');
-                state
-                    .scopes
-                    .last_mut()
-                    .unwrap()
-                    .vars
-                    .insert(var.to_string(), (var.to_string(), Some(*looped_item_type)));
+                state.scopes.last_mut().unwrap().vars.insert(
+                    (*var).to_string(),
+                    ((*var).to_string(), Some(*looped_item_type)),
+                );
                 output.push_str(&transpile_from_ast(&body.0, state)?);
                 output.push_str(&format!(
                     "\n{}=$(({} + 1))\ndone",

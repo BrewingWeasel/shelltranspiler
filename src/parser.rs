@@ -55,7 +55,6 @@ fn expression<'src>() -> impl Parser<'src, &'src str, Spanned<Expr<'src>>, Parse
                         .padded()
                         .ignore_then(
                             ident
-                                .clone()
                                 .then_ignore(just('='))
                                 .then(expr.clone())
                                 .separated_by(just(','))
@@ -300,7 +299,7 @@ pub fn parser<'src>(
                             .labelled("optional arguments"),
                     )
                     .or_not()
-                    .map(|kwargs| kwargs.unwrap_or_default()),
+                    .map(std::option::Option::unwrap_or_default),
             )
             .then_ignore(just(')'))
             .padded()

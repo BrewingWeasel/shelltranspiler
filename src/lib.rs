@@ -2,7 +2,7 @@ use crate::parser::parser;
 use ariadne::{sources, Color, Label, Report, ReportKind};
 use chumsky::{prelude::Rich, Parser};
 use parser::Spanned;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use transpiler::transpile_from_ast;
 
 mod parser;
@@ -234,20 +234,20 @@ fn show_err(err: Rich<'_, char>, filename: String, src: &str) {
         .unwrap()
 }
 
-pub fn transpile_from_file(filename: String) -> Option<String> {
-    let src = std::fs::read_to_string(&filename).unwrap();
+pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
+    let src = std::fs::read_to_string(filename).unwrap();
     let mut state = State::new();
 
     match parser().parse(&src).into_result() {
         Ok(ast) => match transpile_from_ast(&ast, &mut state) {
             Ok(output) => return Some(output),
             Err(err) => {
-                show_err(err, filename.clone(), &src);
+                show_err(err, filename.to_string_lossy().to_string(), &src);
             }
         },
         Err(errors) => {
             for err in errors {
-                show_err(err, filename.clone(), &src);
+                show_err(err, filename.to_string_lossy().to_string(), &src);
             }
         }
     };

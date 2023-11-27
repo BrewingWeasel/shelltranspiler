@@ -1,6 +1,6 @@
 use chumsky::prelude::Rich;
 
-use crate::{parser::Spanned, State, Statement};
+use crate::{parser::Spanned, Function, State, Statement};
 
 use self::statements::transpile_statement;
 
@@ -27,16 +27,23 @@ pub fn transpile_from_ast<'state, 'src: 'state>(
     }
 
     if main_transpiler {
+        let mut compile_function = |func: &Function| {
+            if func.times_called > 0 {
+                func_defs.push_str(&func.contents);
+                func_defs.push('\n');
+            }
+        };
+        for func in &state.prelude.functions {
+            compile_function(func.1)
+        }
+
         for func in &state
             .scopes
             .last()
             .expect("global scope should always exist")
             .functions
         {
-            if func.1.times_called > 0 {
-                func_defs.push_str(&func.1.contents);
-                func_defs.push('\n');
-            }
+            compile_function(func.1)
         }
     }
 

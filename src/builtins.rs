@@ -20,7 +20,7 @@ fn is_empty<'a>() -> Function<'a> {
         times_called: 0,
         contents: String::from(
             "is_empty() {
-test -v $2
+test -z $2
 }",
         ),
     }

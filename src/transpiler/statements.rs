@@ -30,16 +30,7 @@ pub fn transpile_statement<'state, 'src: 'state>(
             state,
         ),
         Statement::Function(ident, args, kwargs, return_value, conts) => {
-            state.scopes.first_mut().unwrap().functions.insert(
-                ident.to_owned(),
-                crate::Function {
-                    args,
-                    kwargs,
-                    return_value: return_value.to_owned(),
-                    times_called: 0,
-                },
-            );
-            state.new_scope(ident);
+            state.new_scope(ident, return_value.clone());
             for (i, (arg, arg_type)) in args.iter().enumerate() {
                 state.scopes.last_mut().unwrap().vars.insert(
                     (*arg).to_string(),
@@ -94,14 +85,27 @@ done
                 );
                 output.push_str(&case_statement);
             }
-            output.push_str(&transpile_from_ast(&conts.0, state)?);
+
+            output.push_str(&transpile_from_ast(&conts.0, state, false)?);
             output.push('}');
             state.end_scope();
-            Ok((output, None))
+            state.scopes.last_mut().unwrap().functions.insert(
+                ident.to_owned(),
+                crate::Function {
+                    args,
+                    kwargs,
+                    return_value: return_value.to_owned(),
+                    times_called: 0,
+                    contents: output,
+                },
+            );
+
+            Ok((String::new(), None))
         }
         Statement::Return(value) => {
-            let func_name = state.scopes.last().unwrap().name;
-            if let Some(_return_type) = state.get_func(func_name).unwrap().return_value.clone() {
+            let last_scope = state.scopes.last().unwrap();
+            let func_name = last_scope.name;
+            if let Some(_return_type) = last_scope.return_value.clone() {
                 let (mut output, run_before) = raw_assignment(
                     "__return_val".to_string(),
                     (&value.0, value.1),
@@ -135,7 +139,7 @@ done
                     .unwrap()
                     .vars
                     .insert((*var).to_string(), ((*var).to_string(), *looped_item_type));
-                output.push_str(&transpile_from_ast(&body.0, state)?);
+                output.push_str(&transpile_from_ast(&body.0, state, false)?);
                 output.push_str(&format!(
                     "\n{}=$(({} + 1))\ndone",
                     &index_value, &index_value
@@ -154,7 +158,7 @@ done
             let (new_output, run_before) = transpile_condition((&condition.0, condition.1), state)?;
             output.push_str(&new_output);
             output.push_str("; do\n");
-            output.push_str(&transpile_from_ast(&body.0, state)?);
+            output.push_str(&transpile_from_ast(&body.0, state, false)?);
             output.push_str("\ndone");
             Ok((output, run_before))
         }
@@ -172,12 +176,16 @@ pub fn transpile_if<'state, 'src: 'state>(
     let (new_output, run_before) = transpile_condition((&condition.0, condition.1), state)?;
     output.push_str(&new_output);
     output.push_str("; then\n");
-    output.push_str(&transpile_from_ast(&if_statement.0.statements, state)?);
+    output.push_str(&transpile_from_ast(
+        &if_statement.0.statements,
+        state,
+        false,
+    )?);
     if let Some(to_continue) = if_statement.0.continue_if.as_ref() {
         match to_continue {
             ContinueIfStatement::Else(statements) => {
                 output.push_str("else \n");
-                output.push_str(&transpile_from_ast(statements, state)?);
+                output.push_str(&transpile_from_ast(statements, state, false)?);
             }
             ContinueIfStatement::If(if_statement) => {
                 output.push_str("else\n");

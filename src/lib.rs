@@ -1,10 +1,12 @@
 use crate::parser::parser;
 use ariadne::{sources, Color, Label, Report, ReportKind};
+use builtins::prelude;
 use chumsky::{prelude::Rich, Parser};
 use parser::Spanned;
 use std::{collections::HashMap, path::PathBuf, process::exit};
 use transpiler::transpile_from_ast;
 
+mod builtins;
 mod parser;
 mod transpiler;
 
@@ -14,6 +16,7 @@ struct Function<'src> {
     kwargs: &'src [Kwarg<'src>],
     return_value: Option<Type>,
     times_called: usize,
+    contents: String,
 }
 
 #[derive(Debug, Clone)]
@@ -133,6 +136,7 @@ impl<'src> Expr<'src> {
 #[derive(Debug, Clone)]
 struct State<'src> {
     scopes: Vec<Scope<'src>>,
+    prelude: Scope<'src>,
     list_num: usize,
     times_ran_for_loop: usize,
 }
@@ -140,14 +144,15 @@ struct State<'src> {
 impl<'src> State<'src> {
     fn new() -> Self {
         Self {
-            scopes: vec![Scope::new("global")],
+            scopes: vec![Scope::new("global", None)],
+            prelude: prelude(),
             list_num: 0,
             times_ran_for_loop: 0,
         }
     }
 
-    fn new_scope(&mut self, name: &'src str) {
-        self.scopes.push(Scope::new(name));
+    fn new_scope(&mut self, name: &'src str, return_value: Option<Type>) {
+        self.scopes.push(Scope::new(name, return_value));
     }
 
     fn end_scope(&mut self) {
@@ -160,7 +165,7 @@ impl<'src> State<'src> {
                 return Some(real_var);
             }
         }
-        None
+        self.prelude.vars.get(variable_name)
     }
 
     fn get_func(&self, function: &str) -> Option<&Function> {
@@ -169,14 +174,18 @@ impl<'src> State<'src> {
                 return Some(real_var);
             }
         }
-        None
+        self.prelude.functions.get(function)
     }
 
     fn call_func(&mut self, function: &str) {
         for scope in self.scopes.iter_mut().rev() {
             if let Some(real_var) = scope.functions.get_mut(function) {
                 real_var.times_called += 1;
+                break;
             }
+        }
+        if let Some(real_var) = self.prelude.functions.get_mut(function) {
+            real_var.times_called += 1;
         }
     }
 
@@ -201,14 +210,16 @@ struct Scope<'src> {
     vars: HashMap<String, (String, Type)>,
     functions: HashMap<&'src str, Function<'src>>,
     name: &'src str,
+    return_value: Option<Type>,
 }
 
 impl<'src> Scope<'src> {
-    fn new(name: &'src str) -> Self {
+    fn new(name: &'src str, return_value: Option<Type>) -> Self {
         Self {
             vars: HashMap::new(),
             functions: HashMap::new(),
             name,
+            return_value,
         }
     }
 }
@@ -240,7 +251,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
     let mut state = State::new();
 
     match parser().parse(&src).into_result() {
-        Ok(ast) => match transpile_from_ast(&ast, &mut state) {
+        Ok(ast) => match transpile_from_ast(&ast, &mut state, true) {
             Ok(output) => return Some(output),
             Err(err) => {
                 show_err(&err, filename.to_string_lossy().to_string(), &src);

@@ -11,8 +11,11 @@ mod statements;
 pub fn transpile_from_ast<'state, 'src: 'state>(
     conts: &'src Vec<Spanned<Statement<'src>>>,
     state: &mut State<'state>,
+    main_transpiler: bool,
 ) -> Result<String, Rich<'src, char>> {
+    let mut func_defs = String::new();
     let mut compiled = String::new();
+
     for expr in conts {
         let (output, run_before) = transpile_statement(expr, state)?;
         if let Some(run) = run_before {
@@ -22,5 +25,20 @@ pub fn transpile_from_ast<'state, 'src: 'state>(
         compiled.push_str(&output);
         compiled.push('\n');
     }
-    Ok(compiled)
+
+    if main_transpiler {
+        for func in &state
+            .scopes
+            .last()
+            .expect("global scope should always exist")
+            .functions
+        {
+            if func.1.times_called > 0 {
+                func_defs.push_str(&func.1.contents);
+                func_defs.push('\n');
+            }
+        }
+    }
+
+    Ok(func_defs + &compiled)
 }

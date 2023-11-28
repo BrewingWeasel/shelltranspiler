@@ -38,7 +38,7 @@ pub fn transpile_condition<'src>(
             Ok((output, run_before))
         }
         Condition::Not(cond) => {
-            let mut output = String::from("not ");
+            let mut output = String::from("! ");
             let (new_output, run_before) = transpile_condition((cond, condition.1), state)?;
             output.push_str(&new_output);
             Ok((output, run_before))
@@ -73,5 +73,131 @@ pub fn transpile_condition<'src>(
             output.push_str(&second_output);
             Ok((output, run_before))
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use chumsky::span::SimpleSpan;
+
+    use crate::{transpiler::condition::transpile_condition, Condition, Expr, State};
+
+    fn dummy_span() -> SimpleSpan {
+        SimpleSpan::new(0, 0)
+    }
+
+    #[test]
+    fn test_basic_equals() {
+        let mut state = State::new();
+        assert_eq!(
+            transpile_condition(
+                (
+                    &Condition::Operator(
+                        "==",
+                        (Expr::Str(String::from("hello")), dummy_span()),
+                        (Expr::Str(String::from("HELLO")), dummy_span()),
+                    ),
+                    dummy_span()
+                ),
+                &mut state,
+            ),
+            Ok((String::from("[ 'hello' = 'HELLO' ]"), None))
+        )
+    }
+
+    #[test]
+    fn test_basic_not_expr() {
+        let mut state = State::new();
+        assert_eq!(
+            transpile_condition(
+                (
+                    &Condition::Not(Box::new(Condition::Expression((
+                        Expr::Call(
+                            "false",
+                            (Vec::new(), dummy_span()),
+                            (Vec::new(), dummy_span()),
+                        ),
+                        dummy_span()
+                    ))),),
+                    dummy_span()
+                ),
+                &mut state,
+            ),
+            Ok((String::from("! false "), None))
+        )
+    }
+
+    #[test]
+    fn test_not_with_and() {
+        let mut state = State::new();
+        assert_eq!(
+            transpile_condition(
+                (
+                    &Condition::Not(Box::new(Condition::InParens(Box::new(Condition::And(
+                        Box::new(Condition::Expression((
+                            Expr::Call(
+                                "false",
+                                (Vec::new(), dummy_span()),
+                                (Vec::new(), dummy_span()),
+                            ),
+                            dummy_span()
+                        ))),
+                        Box::new(Condition::Expression((
+                            Expr::Call(
+                                "true",
+                                (Vec::new(), dummy_span()),
+                                (Vec::new(), dummy_span()),
+                            ),
+                            dummy_span()
+                        )))
+                    )))),),
+                    dummy_span()
+                ),
+                &mut state,
+            ),
+            Ok((String::from("! (false  && true )"), None))
+        )
+    }
+
+    #[test]
+    fn test_not_with_and_and_or() {
+        let mut state = State::new();
+        assert_eq!(
+            transpile_condition(
+                (
+                    &Condition::Not(Box::new(Condition::Or(
+                        Box::new(Condition::InParens(Box::new(Condition::And(
+                            Box::new(Condition::Expression((
+                                Expr::Call(
+                                    "false",
+                                    (Vec::new(), dummy_span()),
+                                    (Vec::new(), dummy_span()),
+                                ),
+                                dummy_span()
+                            ))),
+                            Box::new(Condition::Expression((
+                                Expr::Call(
+                                    "true",
+                                    (Vec::new(), dummy_span()),
+                                    (Vec::new(), dummy_span()),
+                                ),
+                                dummy_span()
+                            )))
+                        )))),
+                        Box::new(Condition::Expression((
+                            Expr::Call(
+                                "false",
+                                (Vec::new(), dummy_span()),
+                                (Vec::new(), dummy_span()),
+                            ),
+                            dummy_span()
+                        )))
+                    ),),),
+                    dummy_span()
+                ),
+                &mut state,
+            ),
+            Ok((String::from("! (false  && true ) || false "), None))
+        )
     }
 }

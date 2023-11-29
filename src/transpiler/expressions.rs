@@ -211,3 +211,77 @@ pub fn transpile_repr<'a>(
         _ => transpile_expr(expr, state),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chumsky::span::SimpleSpan;
+
+    use crate::{transpiler::expressions::transpile_expr, Expr, State, Type};
+
+    fn dummy_span() -> SimpleSpan {
+        SimpleSpan::new(0, 0)
+    }
+
+    #[test]
+    fn test_transpile_str() {
+        let mut state = State::new();
+        assert_eq!(
+            transpile_expr((&Expr::Str(String::from("yes")), dummy_span()), &mut state),
+            Ok((String::from("'yes'"), None))
+        )
+    }
+
+    #[test]
+    fn test_transpile_get_return_value() {
+        let mut state = State::new();
+        state.scopes.last_mut().unwrap().functions.insert(
+            "returns_str",
+            crate::Function {
+                args: &[],
+                kwargs: &[],
+                return_value: Some(crate::Type::Str),
+                times_called: 2,
+                contents: String::new(),
+            },
+        );
+        assert_eq!(
+            transpile_expr(
+                (
+                    &Expr::Call(
+                        "returns_str",
+                        (Vec::new(), dummy_span()),
+                        (Vec::new(), dummy_span())
+                    ),
+                    dummy_span()
+                ),
+                &mut state
+            ),
+            Ok((
+                String::from("$__returns_str_return_value_2"),
+                Some(String::from("returns_str 2"))
+            ))
+        )
+    }
+
+    #[test]
+    fn test_transpile_get_list_at_index() {
+        let mut state = State::new();
+        state.scopes.last_mut().unwrap().vars.insert(
+            String::from("fruits"),
+            (String::from("fruits"), Type::List(Box::new(Type::Str))),
+        );
+        assert_eq!(
+            transpile_expr(
+                (
+                    &Expr::ListIndex("fruits", Box::new((Expr::Num(3), dummy_span()))),
+                    dummy_span()
+                ),
+                &mut state
+            ),
+            Ok((
+                String::from(r#""$(eval "echo \"\$$(echo "$fruits")_$(echo "3")\"")""#),
+                None
+            ))
+        )
+    }
+}

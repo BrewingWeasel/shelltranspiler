@@ -41,7 +41,7 @@ pub fn transpile_statement<'state, 'src: 'state>(
             let mut output = String::from(*ident);
             output.push_str(
                 "() {
-__n_timecalled=$1
+local __n_timecalled=$1
 shift
 ",
             );

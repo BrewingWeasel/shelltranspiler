@@ -12,7 +12,16 @@ pub fn transpile_statement<'state, 'src: 'state>(
     state: &mut State<'state>,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     match &statement.0 {
-        Statement::Expression(expr) => transpile_repr((&expr.0, expr.1), state),
+        Statement::Expression(expr) => {
+            if matches!(
+                expr.0,
+                Expr::Call(_, _, _) | Expr::CallPiped(_, _, _) | Expr::Pipe(_, _)
+            ) {
+                transpile_repr((&expr.0, expr.1), state)
+            } else {
+                Ok((String::new(), None))
+            }
+        }
         Statement::Assignment(first_assignment, ident, var_type, value) => assignment(
             *first_assignment,
             (*ident).to_string(),

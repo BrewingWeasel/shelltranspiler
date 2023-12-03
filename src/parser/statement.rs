@@ -118,6 +118,14 @@ pub fn parse_statement<'src>(
 
         let function = text::keyword("fun")
             .ignore_then(ident)
+            .then(
+                ident
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .delimited_by(just('<'), just('>'))
+                    .or_not(),
+            )
             .then_ignore(just('('))
             .then(
                 ident
@@ -156,8 +164,8 @@ pub fn parse_statement<'src>(
             .padded()
             .then(just("->").padded().ignore_then(get_type()).or_not())
             .then(body)
-            .map(|((((id, args), kwargs), return_type), body)| {
-                Statement::Function(id, args, kwargs, return_type, body)
+            .map(|(((((id, type_vars), args), kwargs), return_type), body)| {
+                Statement::Function(id, type_vars, args, kwargs, return_type, body)
             })
             .labelled("function");
 

@@ -18,6 +18,9 @@ fn get_type<'src>() -> impl Parser<'src, &'src str, Type, ParseErr<'src>> + Clon
         choice((
             text::keyword("string").to(Type::Str),
             text::keyword("int").to(Type::Num),
+            just('%')
+                .ignore_then(text::ident())
+                .map(|v: &str| Type::Generic(v.to_string())),
             type_name
                 .delimited_by(just('['), just(']'))
                 .map(|t| Type::List(Box::new(t))),

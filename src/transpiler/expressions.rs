@@ -130,7 +130,7 @@ fn call_function<'a>(
             for real_kwarg in func.kwargs {
                 if &real_kwarg.ident == kwarg_ident {
                     if let Some(expected_type) = &real_kwarg.kwarg_type {
-                        if expected_type != &expr.get_type(state) {
+                        if !expected_type.matches(&expr.get_type(state)) {
                             return Err(Rich::custom(
                                 *span,
                                 format!(
@@ -153,7 +153,7 @@ fn call_function<'a>(
         }
         for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(func.args.iter()) {
             if let Some(arg_type) = possible_arg_type {
-                if &arg.get_type(state) != arg_type {
+                if !arg.get_type(state).matches(arg_type) {
                     return Err(Rich::custom(
                         *span,
                         format!("Expected {arg:?} to match the type of {arg_name} ({arg_type:?})"),

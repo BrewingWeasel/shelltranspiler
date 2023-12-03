@@ -33,6 +33,7 @@ enum Statement<'src> {
     LocalAssignment(bool, &'src str, Option<Type>, Spanned<Expr<'src>>),
     Function(
         &'src str,
+        Option<Vec<&'src str>>,
         Vec<(&'src str, Option<Type>)>,
         Vec<Kwarg<'src>>,
         Option<Type>,
@@ -57,7 +58,28 @@ enum Type {
     Str,
     Num,
     Any,
+    Generic(String),
     List(Box<Type>),
+}
+
+impl Type {
+    fn matches(&self, other_type: &Type) -> bool {
+        match (self, other_type) {
+            (_, Self::Any) | (Self::Any, _) => true,
+            (Self::List(l1), Self::List(l2)) => l1.matches(l2),
+            (Self::List(_), _) | (_, Self::List(_)) => false,
+            (Self::Generic(_), _) | (_, Self::Generic(_)) => true,
+            (t1, t2) => t1 == t2,
+        }
+    }
+
+    fn get_generic_var(&self) -> Option<&str> {
+        match self {
+            Self::Generic(name) => Some(name),
+            Self::List(t) => t.get_generic_var(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -104,7 +126,7 @@ enum Expr<'src> {
 }
 
 impl<'src> Expr<'src> {
-    fn get_type(&self, state: &State) -> Type {
+    fn get_type(&self, state: &'src State) -> Type {
         match self {
             Self::Num(_) => Type::Num,
             Self::Str(_) => Type::Str,

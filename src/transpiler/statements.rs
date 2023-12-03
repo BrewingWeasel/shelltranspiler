@@ -29,9 +29,18 @@ pub fn transpile_statement<'state, 'src: 'state>(
             AssignmentType::Local,
             state,
         ),
-        Statement::Function(ident, args, kwargs, return_value, conts) => {
+        Statement::Function(ident, type_vars, args, kwargs, return_value, conts) => {
             state.new_scope(ident, return_value.clone());
             for (i, (arg, arg_type)) in args.iter().enumerate() {
+                if let Some(generic_ident) = arg_type.as_ref().and_then(|v| v.get_generic_var()) {
+                    if let Some(type_vars) = type_vars {
+                        if !type_vars.contains(&generic_ident) {
+                            return Err(Rich::custom(statement.1, format!("Could not find generic variable %{generic_ident}. Other generic variables that were found: {:?}", type_vars)));
+                        }
+                    } else {
+                        return Err(Rich::custom(statement.1, format!("Tried to use generic variable %{generic_ident}, but couldn't find any generic variables")));
+                    }
+                }
                 state.scopes.last_mut().unwrap().vars.insert(
                     (*arg).to_string(),
                     ((i + 1).to_string(), arg_type.clone().unwrap_or(Type::Any)),
@@ -235,7 +244,7 @@ pub fn assignment<'state, 'src: 'state>(
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     let expr_type = &value.0.get_type(state);
     if let Some(attempted_type) = var_type {
-        if attempted_type != expr_type {
+        if !attempted_type.matches(expr_type) {
             return Err(Rich::custom(
                 value.1,
                 format!("Type {attempted_type:?} does not match {expr_type:?}"),
@@ -250,7 +259,7 @@ pub fn assignment<'state, 'src: 'state>(
                 format!("Variable {ident} already exists, shadowing is not supported (yet?)",),
             ));
         }
-        if &var.1 != expr_type {
+        if !var.1.matches(expr_type) {
             return Err(Rich::custom(
                 value.1,
                 format!(

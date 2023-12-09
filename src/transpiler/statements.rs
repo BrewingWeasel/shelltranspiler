@@ -46,7 +46,7 @@ pub fn transpile_statement<'state, 'src: 'state>(
                 {
                     if let Some(type_vars) = type_vars {
                         if !type_vars.contains(&generic_ident) {
-                            return Err(Rich::custom(statement.1, format!("Could not find generic variable %{generic_ident}. Other generic variables that were found: {:?}", type_vars)));
+                            return Err(Rich::custom(statement.1, format!("Could not find generic variable %{generic_ident}. Other generic variables that were found: {type_vars:?}")));
                         }
                     } else {
                         return Err(Rich::custom(statement.1, format!("Tried to use generic variable %{generic_ident}, but couldn't find any generic variables")));
@@ -279,16 +279,13 @@ pub fn assignment<'state, 'src: 'state>(
                 ),
             ));
         }
-    } else {
-        if !first_assignment {
-            return Err(Rich::custom(
-                value.1,
-                format!(
-                    "Variable {} does not exist yet, maybe you meant to put var in front?",
-                    ident
-                ),
-            ));
-        }
+    } else if !first_assignment {
+        return Err(Rich::custom(
+            value.1,
+            format!(
+                "Variable {ident} does not exist yet, maybe you meant to put var in front?"
+            ),
+        ));
     }
 
     let scope = match assignment_type {
@@ -301,5 +298,5 @@ pub fn assignment<'state, 'src: 'state>(
         .vars
         .insert(ident.clone(), (ident.clone(), expr_type.clone()));
 
-    Ok(raw_assignment(ident, value, assignment_type, state)?)
+    raw_assignment(ident, value, assignment_type, state)
 }

@@ -102,7 +102,7 @@ mod test {
                 &mut state,
             ),
             Ok((String::from("[ 'hello' = 'HELLO' ]"), None))
-        )
+        );
     }
 
     #[test]
@@ -124,7 +124,7 @@ mod test {
                 &mut state,
             ),
             Ok((String::from("! false "), None))
-        )
+        );
     }
 
     #[test]
@@ -156,7 +156,7 @@ mod test {
                 &mut state,
             ),
             Ok((String::from("! (false  && true )"), None))
-        )
+        );
     }
 
     #[test]
@@ -198,6 +198,6 @@ mod test {
                 &mut state,
             ),
             Ok((String::from("! (false  && true ) || false "), None))
-        )
+        );
     }
 }

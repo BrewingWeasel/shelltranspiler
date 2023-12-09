@@ -34,7 +34,7 @@ pub fn transpile_from_ast<'state, 'src: 'state>(
             }
         };
         for func in &state.prelude.functions {
-            compile_function(func.1)
+            compile_function(func.1);
         }
 
         for func in &state
@@ -43,7 +43,7 @@ pub fn transpile_from_ast<'state, 'src: 'state>(
             .expect("global scope should always exist")
             .functions
         {
-            compile_function(func.1)
+            compile_function(func.1);
         }
     }
 

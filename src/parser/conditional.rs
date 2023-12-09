@@ -195,8 +195,6 @@ mod tests {
                 }
             }
         }
-        if !got_to_correct_condition.0 || !got_to_correct_condition.1 {
-            panic!("Did not reach all expected conditions")
-        }
+        assert!(!(!got_to_correct_condition.0 || !got_to_correct_condition.1), "Did not reach all expected conditions");
     }
 }

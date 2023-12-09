@@ -229,7 +229,7 @@ mod tests {
         assert_eq!(
             transpile_expr((&Expr::Str(String::from("yes")), dummy_span()), &mut state),
             Ok((String::from("'yes'"), None))
-        )
+        );
     }
 
     #[test]
@@ -261,7 +261,7 @@ mod tests {
                 String::from("$__returns_str_return_value_2"),
                 Some(String::from("returns_str 2"))
             ))
-        )
+        );
     }
 
     #[test]
@@ -283,6 +283,6 @@ mod tests {
                 String::from(r#""$(eval "echo \"\$$(echo "$fruits")_$(echo "3")\"")""#),
                 None
             ))
-        )
+        );
     }
 }

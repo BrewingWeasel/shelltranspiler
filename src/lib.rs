@@ -63,7 +63,7 @@ enum Type {
 }
 
 impl Type {
-    fn matches(&self, other_type: &Type) -> bool {
+    fn matches(&self, other_type: &Self) -> bool {
         match (self, other_type) {
             (_, Self::Any) | (Self::Any, _) => true,
             (Self::List(l1), Self::List(l2)) => l1.matches(l2),
@@ -148,10 +148,7 @@ impl<'src> Expr<'src> {
                     Type::Any
                 }
             }),
-            Self::Var(v) => state
-                .get_var(v)
-                .map(|var| var.1.clone())
-                .unwrap_or(Type::Any),
+            Self::Var(v) => state.get_var(v).map_or(Type::Any, |var| var.1.clone()),
             Self::Call(func, (args, _), _) => {
                 if let Some(fun) = state.get_func(func) {
                     if let Some(return_v) = &fun.return_value {
@@ -173,9 +170,8 @@ impl<'src> Expr<'src> {
                                     None
                                 })
                                 .unwrap_or(Type::Any);
-                        } else {
-                            return return_v.clone();
                         }
+                        return return_v.clone();
                     }
                 }
                 Type::Any

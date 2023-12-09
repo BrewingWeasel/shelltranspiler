@@ -156,30 +156,29 @@ impl<'src> Expr<'src> {
                 if let Some(fun) = state.get_func(func) {
                     if let Some(return_v) = &fun.return_value {
                         if let Type::Generic(generic_v) = return_v {
-                            for ((attempted_arg, _), (_, arg_type)) in
-                                args.iter().zip(fun.args.iter())
-                            {
-                                if let Some((real_generic_v, path_to_generic)) =
-                                    arg_type.as_ref().and_then(|v| v.get_generic_var())
-                                {
-                                    if generic_v == real_generic_v {
-                                        return get_generic_by_path(
-                                            &path_to_generic,
-                                            attempted_arg.get_type(state),
-                                        );
+                            return args
+                                .iter()
+                                .zip(fun.args.iter())
+                                .find_map(|((attempted_arg, _), (_, arg_type))| {
+                                    if let Some((real_generic_v, path_to_generic)) =
+                                        arg_type.as_ref().and_then(|v| v.get_generic_var())
+                                    {
+                                        if generic_v == real_generic_v {
+                                            return Some(get_generic_by_path(
+                                                &path_to_generic,
+                                                attempted_arg.get_type(state),
+                                            ));
+                                        }
                                     }
-                                }
-                            }
-                            Type::Any
+                                    None
+                                })
+                                .unwrap_or(Type::Any);
                         } else {
-                            return_v.clone()
+                            return return_v.clone();
                         }
-                    } else {
-                        Type::Any
                     }
-                } else {
-                    Type::Any
                 }
+                Type::Any
             }
             Self::CallPiped(_, _, _) => Type::Any,
             Self::Pipe(_, expr) => expr.0.get_type(state),

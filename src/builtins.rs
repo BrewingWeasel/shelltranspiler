@@ -19,6 +19,7 @@ pub fn prelude<'a>() -> Scope<'a> {
             "test -d $1",
         ),
         push(),
+        len(),
         generate_function(
             "is_file",
             [("path", Some(Type::Str))].into(),
@@ -48,6 +49,19 @@ fn push<'a>() -> (&'a str, Function<'a>) {
         &[],
         Some(Type::Generic(String::from("v"))),
         r#"eval "$1_$(eval "echo \"\$$(echo "$1")_len\"")=$2"; eval "$1_len=$(( "$(echo "$1")_len" + 1))""#,
+    )
+}
+
+fn len<'a>() -> (&'a str, Function<'a>) {
+    generate_function(
+        "len",
+        vec![(
+            "list",
+            Some(Type::List(Box::new(Type::Generic(String::from("v"))))),
+        )],
+        &[],
+        Some(Type::Num),
+        r#"eval "__len_return_value_$__n_timecalled=\"\$${1}_len\"""#,
     )
 }
 

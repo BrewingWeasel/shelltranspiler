@@ -21,6 +21,7 @@ pub fn transpile_expr<'a>(
                 output.push_str(&format!("{list_pointer}_{i}={new_output}\n"));
                 // TODO: type checking
             }
+            add_before.push_str(&format!("{list_pointer}_len={}\n", elements.0.len()));
             add_before.push_str(&output);
             Ok((format!("\"{list_pointer}\""), Some(add_before)))
         }
@@ -237,7 +238,7 @@ mod tests {
         state.scopes.last_mut().unwrap().functions.insert(
             "returns_str",
             crate::Function {
-                args: &[],
+                args: Vec::new(),
                 kwargs: &[],
                 return_value: Some(crate::Type::Str),
                 times_called: 2,

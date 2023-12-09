@@ -4,14 +4,28 @@ use crate::{Function, Kwarg, Scope, Type};
 
 pub fn prelude<'a>() -> Scope<'a> {
     let functions = HashMap::from([
-        generate_function("is_empty", &[("str", Some(Type::Str))], &[], "test -z $1"),
+        generate_function(
+            "is_empty",
+            [("str", Some(Type::Str))].into(),
+            &[],
+            None,
+            "test -z $1",
+        ),
         generate_function(
             "is_directory",
-            &[("path", Some(Type::Str))],
+            [("path", Some(Type::Str))].into(),
             &[],
+            None,
             "test -d $1",
         ),
-        generate_function("is_file", &[("path", Some(Type::Str))], &[], "test -f $1"),
+        push(),
+        generate_function(
+            "is_file",
+            [("path", Some(Type::Str))].into(),
+            &[],
+            None,
+            "test -f $1",
+        ),
     ]);
     Scope {
         vars: HashMap::new(),
@@ -21,10 +35,27 @@ pub fn prelude<'a>() -> Scope<'a> {
     }
 }
 
+fn push<'a>() -> (&'a str, Function<'a>) {
+    generate_function(
+        "push",
+        vec![
+            (
+                "list",
+                Some(Type::List(Box::new(Type::Generic(String::from("v"))))),
+            ),
+            ("elem", Some(Type::Generic(String::from("v")))),
+        ],
+        &[],
+        Some(Type::Generic(String::from("v"))),
+        r#"eval "$1_$(eval "echo \"\$$(echo "$1")_len\"")=$2"; eval "$1_len=$(( "$(echo "$1")_len" + 1))""#,
+    )
+}
+
 fn generate_function<'a>(
     name: &'a str,
-    args: &'a [(&str, Option<Type>)],
+    args: Vec<(&'a str, Option<Type>)>,
     kwargs: &'a [Kwarg<'a>],
+    return_value: Option<Type>,
     contents: &str,
 ) -> (&'a str, Function<'a>) {
     (
@@ -32,7 +63,7 @@ fn generate_function<'a>(
         Function {
             args,
             kwargs,
-            return_value: None,
+            return_value,
             times_called: 0,
             contents: format!(
                 "{name}() {{

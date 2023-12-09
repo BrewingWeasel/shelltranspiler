@@ -110,7 +110,7 @@ done
             state.scopes.last_mut().unwrap().functions.insert(
                 ident.to_owned(),
                 crate::Function {
-                    args,
+                    args: args.clone(),
                     kwargs,
                     return_value: return_value.to_owned(),
                     times_called: 0,

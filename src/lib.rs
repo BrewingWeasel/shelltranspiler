@@ -12,7 +12,7 @@ mod transpiler;
 
 #[derive(Debug, Clone)]
 struct Function<'src> {
-    args: &'src [(&'src str, Option<Type>)],
+    args: Vec<(&'src str, Option<Type>)>,
     kwargs: &'src [Kwarg<'src>],
     return_value: Option<Type>,
     times_called: usize,
@@ -126,7 +126,7 @@ enum Expr<'src> {
 }
 
 impl<'src> Expr<'src> {
-    fn get_type(&self, state: &'src State) -> Type {
+    fn get_type(&self, state: &'src State<'src>) -> Type {
         match self {
             Self::Num(_) => Type::Num,
             Self::Str(_) => Type::Str,
@@ -181,7 +181,7 @@ impl<'src> State<'src> {
         self.scopes.pop();
     }
 
-    fn get_var(&'src self, variable_name: &str) -> Option<&(String, Type)> {
+    fn get_var(&self, variable_name: &str) -> Option<&(String, Type)> {
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.vars.get(variable_name) {
                 return Some(real_var);
@@ -213,7 +213,7 @@ impl<'src> State<'src> {
 
     fn get_times_called(&self, function: &str) -> String {
         self.get_func(function)
-            .map_or_else(String::new, |f| f.times_called.to_string())
+            .map_or_else(String::new, move |f| f.times_called.to_string())
     }
 
     fn new_list_pointer(&mut self) -> String {

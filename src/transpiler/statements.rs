@@ -41,7 +41,9 @@ pub fn transpile_statement<'state, 'src: 'state>(
         Statement::Function(ident, type_vars, args, kwargs, return_value, conts) => {
             state.new_scope(ident, return_value.clone());
             for (i, (arg, arg_type)) in args.iter().enumerate() {
-                if let Some(generic_ident) = arg_type.as_ref().and_then(|v| v.get_generic_var()) {
+                if let Some((generic_ident, _)) =
+                    arg_type.as_ref().and_then(|v| v.get_generic_var())
+                {
                     if let Some(type_vars) = type_vars {
                         if !type_vars.contains(&generic_ident) {
                             return Err(Rich::custom(statement.1, format!("Could not find generic variable %{generic_ident}. Other generic variables that were found: {:?}", type_vars)));

@@ -73,13 +73,20 @@ impl Type {
         }
     }
 
-    fn get_generic_var(&self) -> Option<&str> {
+    fn get_generic_var(&self) -> Option<(&str, Vec<PathToValue>)> {
         match self {
-            Self::Generic(name) => Some(name),
-            Self::List(t) => t.get_generic_var(),
+            Self::Generic(name) => Some((name, Vec::new())),
+            Self::List(t) => t.get_generic_var().map(|(ty, mut path)| {
+                path.push(PathToValue::List);
+                (ty, path)
+            }),
             _ => None,
         }
     }
+}
+
+enum PathToValue {
+    List,
 }
 
 #[derive(Debug, Clone)]
@@ -145,14 +152,54 @@ impl<'src> Expr<'src> {
                 .get_var(v)
                 .map(|var| var.1.clone())
                 .unwrap_or(Type::Any),
-            Self::Call(func, _, _) => state
-                .get_func(func)
-                .and_then(|func| func.return_value.clone())
-                .unwrap_or(Type::Any),
+            Self::Call(func, (args, _), _) => {
+                if let Some(fun) = state.get_func(func) {
+                    if let Some(return_v) = &fun.return_value {
+                        if let Type::Generic(generic_v) = return_v {
+                            for ((attempted_arg, _), (_, arg_type)) in
+                                args.iter().zip(fun.args.iter())
+                            {
+                                if let Some((real_generic_v, path_to_generic)) =
+                                    arg_type.as_ref().and_then(|v| v.get_generic_var())
+                                {
+                                    if generic_v == real_generic_v {
+                                        return get_generic_by_path(
+                                            &path_to_generic,
+                                            attempted_arg.get_type(state),
+                                        );
+                                    }
+                                }
+                            }
+                            Type::Any
+                        } else {
+                            return_v.clone()
+                        }
+                    } else {
+                        Type::Any
+                    }
+                } else {
+                    Type::Any
+                }
+            }
             Self::CallPiped(_, _, _) => Type::Any,
             Self::Pipe(_, expr) => expr.0.get_type(state),
         }
     }
+}
+
+fn get_generic_by_path(path_to_generic: &[PathToValue], mut ty: Type) -> Type {
+    for operation in path_to_generic {
+        match operation {
+            PathToValue::List => {
+                if let Type::List(new_ty) = ty {
+                    ty = *new_ty;
+                } else {
+                    panic!("Getting nested generic failed, path to type did not exist");
+                }
+            }
+        }
+    }
+    ty
 }
 
 #[derive(Debug, Clone)]

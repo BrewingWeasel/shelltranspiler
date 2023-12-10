@@ -113,7 +113,7 @@ done
                 ident.to_owned(),
                 crate::Function {
                     args: args.clone(),
-                    kwargs,
+                    kwargs: kwargs.clone(),
                     return_value: return_value.to_owned(),
                     times_called: 0,
                     contents: output,
@@ -282,9 +282,7 @@ pub fn assignment<'state, 'src: 'state>(
     } else if !first_assignment {
         return Err(Rich::custom(
             value.1,
-            format!(
-                "Variable {ident} does not exist yet, maybe you meant to put var in front?"
-            ),
+            format!("Variable {ident} does not exist yet, maybe you meant to put var in front?"),
         ));
     }
 

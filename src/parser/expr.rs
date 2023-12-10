@@ -7,8 +7,12 @@ pub fn expression<'src>(
 ) -> impl Parser<'src, &'src str, Spanned<Expr<'src>>, ParseErr<'src>> + Clone {
     let ident = text::ident().padded();
     recursive(|expr| {
-        let int = text::int(10)
-            .map(|s: &str| Expr::Num(s.parse().unwrap()))
+        let int = just('-')
+            .or_not()
+            .then(text::int(10))
+            .map(|(negative, s): (Option<_>, &str)| {
+                Expr::Num(s.parse::<i64>().unwrap() * (if negative.is_some() { -1 } else { 1 }))
+            })
             .padded();
 
         let strvalue = any()

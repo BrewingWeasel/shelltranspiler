@@ -128,7 +128,7 @@ fn call_function<'a>(
         }
         for (kwarg_ident, (expr, span)) in kwargs {
             let mut known_kwarg = false;
-            for real_kwarg in func.kwargs {
+            for real_kwarg in &func.kwargs {
                 if &real_kwarg.ident == kwarg_ident {
                     if let Some(expected_type) = &real_kwarg.kwarg_type {
                         if !expected_type.matches(&expr.get_type(state)) {
@@ -239,7 +239,7 @@ mod tests {
             "returns_str",
             crate::Function {
                 args: Vec::new(),
-                kwargs: &[],
+                kwargs: Vec::new(),
                 return_value: Some(crate::Type::Str),
                 times_called: 2,
                 contents: String::new(),

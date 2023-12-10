@@ -13,7 +13,7 @@ mod transpiler;
 #[derive(Debug, Clone)]
 struct Function<'src> {
     args: Vec<(&'src str, Option<Type>)>,
-    kwargs: &'src [Kwarg<'src>],
+    kwargs: Vec<Kwarg<'src>>,
     return_value: Option<Type>,
     times_called: usize,
     contents: String,

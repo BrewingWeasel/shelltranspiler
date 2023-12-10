@@ -98,6 +98,39 @@ pub fn transpile_expr<'a>(
             output.push(')');
             Ok((output, None))
         }
+        Expr::Plus(first, second) => {
+            let type1 = first.0.get_type(state);
+            let type2 = second.0.get_type(state);
+            if type1 != type2 {
+                return Err(Rich::custom(
+                    first.1.union(second.1),
+                    format!(
+                        "Types being added do not match (found {:?} and {:?})",
+                        type1, type2
+                    ),
+                ));
+            }
+            if type1 == Type::Num || type1 == Type::Str {
+                let (first_expr, run_before) = transpile_repr((&first.0, first.1), state)?;
+                let mut run_before = run_before.unwrap_or_default();
+                let (second_expr, new_run_before) = transpile_repr((&second.0, second.1), state)?;
+                if let Some(run) = new_run_before {
+                    run_before.push_str(&run);
+                }
+                let output = if type1 == Type::Num {
+                    format!("$(({} + {}))", first_expr, second_expr)
+                } else {
+                    format!("{}{}", first_expr, second_expr)
+                };
+                Ok((output, Some(run_before)))
+            } else {
+                Err(Rich::custom(
+                    first.1.union(second.1),
+                    format!("Expected type int or string, found {:?}", type1),
+                ))
+            }
+        }
+        Expr::Minus(_, _) => unimplemented!(),
     }
 }
 

@@ -79,19 +79,38 @@ pub fn expression<'src>(
             ))
             .map_with(|expr: Expr, e| -> Spanned<Expr> { (expr, e.span()) });
 
-            atom.then(just("|>").padded().ignore_then(part).or_not())
-                .map(
-                    |(first, into_piped): (Spanned<Expr>, Option<Spanned<Expr>>)| {
-                        if let Some(second) = into_piped {
-                            (
-                                Expr::Pipe(Box::new(first.clone()), Box::new(second.clone())),
-                                first.1.union(second.1),
-                            )
-                        } else {
-                            first
-                        }
-                    },
-                )
+            atom.then(
+                choice((just("|>"), just("+"), just("-")))
+                    .padded()
+                    .then(part)
+                    .or_not(),
+            )
+            .map(
+                |(first, second): (Spanned<Expr>, Option<(&str, Spanned<Expr>)>)| {
+                    if let Some((operation, second_expr)) = second {
+                        (
+                            match operation {
+                                "|>" => Expr::Pipe(
+                                    Box::new(first.clone()),
+                                    Box::new(second_expr.clone()),
+                                ),
+                                "+" => Expr::Plus(
+                                    Box::new(first.clone()),
+                                    Box::new(second_expr.clone()),
+                                ),
+                                "-" => Expr::Minus(
+                                    Box::new(first.clone()),
+                                    Box::new(second_expr.clone()),
+                                ),
+                                _ => unimplemented!(),
+                            },
+                            first.1.union(second_expr.1),
+                        )
+                    } else {
+                        first
+                    }
+                },
+            )
         })
     })
 }

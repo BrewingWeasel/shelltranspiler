@@ -130,6 +130,8 @@ enum Expr<'src> {
         Spanned<Vec<(&'src str, Spanned<Expr<'src>>)>>,
     ),
     Pipe(Box<Spanned<Expr<'src>>>, Box<Spanned<Expr<'src>>>),
+    Plus(Box<Spanned<Expr<'src>>>, Box<Spanned<Expr<'src>>>),
+    Minus(Box<Spanned<Expr<'src>>>, Box<Spanned<Expr<'src>>>),
 }
 
 impl<'src> Expr<'src> {
@@ -178,6 +180,8 @@ impl<'src> Expr<'src> {
             }
             Self::CallPiped(_, _, _) => Type::Any,
             Self::Pipe(_, expr) => expr.0.get_type(state),
+            Self::Plus(expr, _) => expr.0.get_type(state),
+            Self::Minus(expr, _) => expr.0.get_type(state),
         }
     }
 }

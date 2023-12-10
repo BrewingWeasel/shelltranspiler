@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 
-use crate::{parser::Spanned, Expr, State, Type};
-use chumsky::{container::Seq, prelude::Rich, span::Span};
+use crate::{get_generic_by_path, parser::Spanned, Expr, State, Type};
+use chumsky::{
+    container::Seq,
+    prelude::Rich,
+    span::{SimpleSpan, Span},
+};
 
 pub fn transpile_expr<'a>(
     expr: Spanned<&'a Expr>,
@@ -167,6 +171,32 @@ fn call_function<'a>(
     let (args, args_span) = args;
     let (kwargs, _kwargs_span) = kwargs;
     let mut output = String::new();
+
+    let check_used_generic = |expected_type: &Type,
+                              other_type: &Type,
+                              generic_types_map: &mut HashMap<String, Type>,
+                              span: &SimpleSpan| {
+        if let Some((v, path_to_generic)) = expected_type.get_generic_var() {
+            let other_type = get_generic_by_path(&path_to_generic, other_type.clone());
+            if let Some(previous_type) = generic_types_map.get(v) {
+                if !other_type.matches(previous_type) {
+                    return Err(Rich::custom(
+                        *span,
+                        format!(
+                            "Expected {:?} to match the type of previous type of generic variable {} ({:?})",
+                            other_type,
+                            v,
+                            previous_type
+                        ),
+                    ));
+                }
+            } else {
+                generic_types_map.insert(v.to_owned(), other_type.to_owned());
+            }
+        }
+        Ok(())
+    };
+
     if let Some(func) = state.get_func(f) {
         if args.len() != func.args.len() {
             let span = match args.len() {
@@ -183,21 +213,28 @@ fn call_function<'a>(
                 ),
             ));
         }
+        let mut generic_types_map = HashMap::new();
         for (kwarg_ident, (expr, span)) in kwargs {
             let mut known_kwarg = false;
             for real_kwarg in &func.kwargs {
                 if &real_kwarg.ident == kwarg_ident {
                     if let Some(expected_type) = &real_kwarg.kwarg_type {
-                        if !expected_type.matches(&expr.get_type(state)) {
+                        let other_type = &expr.get_type(state);
+                        if !expected_type.matches(other_type) {
                             return Err(Rich::custom(
                                 *span,
                                 format!(
                                     "Expected {:?} to match the type of {:?}",
-                                    expr.get_type(state),
-                                    expected_type
+                                    other_type, expected_type
                                 ),
                             ));
                         }
+                        check_used_generic(
+                            expected_type,
+                            other_type,
+                            &mut generic_types_map,
+                            span,
+                        )?;
                     }
                     known_kwarg = true;
                 }
@@ -211,12 +248,14 @@ fn call_function<'a>(
         }
         for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(func.args.iter()) {
             if let Some(arg_type) = possible_arg_type {
-                if !arg.get_type(state).matches(arg_type) {
+                let attempted_type = &arg.get_type(state);
+                if !attempted_type.matches(arg_type) {
                     return Err(Rich::custom(
                         *span,
                         format!("Expected {arg:?} to match the type of {arg_name} ({arg_type:?})"),
                     ));
                 }
+                check_used_generic(arg_type, attempted_type, &mut generic_types_map, span)?;
             }
         }
     }

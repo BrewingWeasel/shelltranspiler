@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{parser::Spanned, Expr, State, Type};
-use chumsky::{prelude::Rich, span::Span};
+use chumsky::{container::Seq, prelude::Rich, span::Span};
 
 pub fn transpile_expr<'a>(
     expr: Spanned<&'a Expr>,
@@ -100,18 +100,21 @@ pub fn transpile_expr<'a>(
             output.push(')');
             Ok((output, None))
         }
-        Expr::Plus(first, second) => run_operation(
-            first,
-            second,
-            HashMap::from([(Type::Num, "$(({1} + {2}))"), (Type::Str, "{1}{2}")]),
-            state,
-        ),
-        Expr::Minus(first, second) => run_operation(
-            first,
-            second,
-            HashMap::from([(Type::Num, "$(({1} - {2}))")]),
-            state,
-        ),
+        Expr::Operation(op, first, second) => match *op {
+            "+" => run_operation(
+                first,
+                second,
+                HashMap::from([(Type::Num, "$(({1} + {2}))"), (Type::Str, "{1}{2}")]),
+                state,
+            ),
+            op if *&["-", "*", "/", "%", "**"].contains(&op) => run_operation(
+                first,
+                second,
+                HashMap::from([(Type::Num, format!("$(({{1}} {op} {{2}}))").as_str())]),
+                state,
+            ),
+            _ => unreachable!(),
+        },
     }
 }
 

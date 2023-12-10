@@ -80,10 +80,18 @@ pub fn expression<'src>(
             .map_with(|expr: Expr, e| -> Spanned<Expr> { (expr, e.span()) });
 
             atom.then(
-                choice((just("|>"), just("+"), just("-")))
-                    .padded()
-                    .then(part)
-                    .or_not(),
+                choice((
+                    just("|>"),
+                    just("+"),
+                    just("**"),
+                    just("-"),
+                    just("/"),
+                    just("*"),
+                    just("%"),
+                ))
+                .padded()
+                .then(part)
+                .or_not(),
             )
             .map(
                 |(first, second): (Spanned<Expr>, Option<(&str, Spanned<Expr>)>)| {
@@ -94,15 +102,11 @@ pub fn expression<'src>(
                                     Box::new(first.clone()),
                                     Box::new(second_expr.clone()),
                                 ),
-                                "+" => Expr::Plus(
+                                c => Expr::Operation(
+                                    c,
                                     Box::new(first.clone()),
                                     Box::new(second_expr.clone()),
                                 ),
-                                "-" => Expr::Minus(
-                                    Box::new(first.clone()),
-                                    Box::new(second_expr.clone()),
-                                ),
-                                _ => unimplemented!(),
                             },
                             first.1.union(second_expr.1),
                         )

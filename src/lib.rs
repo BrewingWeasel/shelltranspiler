@@ -182,8 +182,7 @@ impl<'src> Expr<'src> {
                 Type::Any
             }
             Self::CallPiped(_, _, _) => Type::Any,
-            Self::Pipe(_, expr) => expr.0.get_type(state),
-            Self::Operation(_, expr, _) => expr.0.get_type(state),
+            Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),
         }
     }
 }

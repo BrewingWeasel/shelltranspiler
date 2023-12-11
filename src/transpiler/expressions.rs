@@ -111,7 +111,7 @@ pub fn transpile_expr<'a>(
                 HashMap::from([(Type::Num, "$(({1} + {2}))"), (Type::Str, "{1}{2}")]),
                 state,
             ),
-            op if *&["-", "*", "/", "%", "**"].contains(&op) => run_operation(
+            op if ["-", "*", "/", "%", "**"].contains(&op) => run_operation(
                 first,
                 second,
                 HashMap::from([(Type::Num, format!("$(({{1}} {op} {{2}}))").as_str())]),
@@ -134,8 +134,7 @@ fn run_operation<'a>(
         return Err(Rich::custom(
             first.1.union(second.1),
             format!(
-                "Types being added do not match (found {:?} and {:?})",
-                type1, type2
+                "Types being added do not match (found {type1:?} and {type2:?})"
             ),
         ));
     }
@@ -183,15 +182,12 @@ fn call_function<'a>(
                     return Err(Rich::custom(
                         *span,
                         format!(
-                            "Expected {:?} to match the type of previous type of generic variable {} ({:?})",
-                            other_type,
-                            v,
-                            previous_type
+                            "Expected {other_type:?} to match the type of previous type of generic variable {v} ({previous_type:?})"
                         ),
                     ));
                 }
             } else {
-                generic_types_map.insert(v.to_owned(), other_type.to_owned());
+                generic_types_map.insert(v.to_owned(), other_type);
             }
         }
         Ok(())
@@ -224,8 +220,7 @@ fn call_function<'a>(
                             return Err(Rich::custom(
                                 *span,
                                 format!(
-                                    "Expected {:?} to match the type of {:?}",
-                                    other_type, expected_type
+                                    "Expected {other_type:?} to match the type of {expected_type:?}"
                                 ),
                             ));
                         }

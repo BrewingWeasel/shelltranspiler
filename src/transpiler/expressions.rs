@@ -38,7 +38,7 @@ pub fn transpile_expr<'a>(
                 if actual_type != Type::Num {
                     return Err(Rich::custom(
                         index.1,
-                        format!("Only int works for indexing list, found {actual_type:?}"),
+                        format!("Only int works for indexing list, found {actual_type}"),
                     ));
                 }
 
@@ -133,9 +133,7 @@ fn run_operation<'a>(
     if type1 != type2 {
         return Err(Rich::custom(
             first.1.union(second.1),
-            format!(
-                "Types being added do not match (found {type1:?} and {type2:?})"
-            ),
+            format!("Types being added do not match (found {type1} and {type2})"),
         ));
     }
     let (first_expr, run_before) = transpile_repr((&first.0, first.1), state)?;
@@ -153,7 +151,7 @@ fn run_operation<'a>(
         Err(Rich::custom(
             first.1.union(second.1),
             format!(
-                "Expected type to be one of {:?} but found {:?}",
+                "Expected type to be one of {:?} but found {}",
                 operations.keys(),
                 type1
             ),
@@ -182,7 +180,7 @@ fn call_function<'a>(
                     return Err(Rich::custom(
                         *span,
                         format!(
-                            "Expected {other_type:?} to match the type of previous type of generic variable {v} ({previous_type:?})"
+                            "Expected {other_type} to match the type of previous type of generic variable {v} ({previous_type})"
                         ),
                     ));
                 }
@@ -220,7 +218,7 @@ fn call_function<'a>(
                             return Err(Rich::custom(
                                 *span,
                                 format!(
-                                    "Expected {other_type:?} to match the type of {expected_type:?}"
+                                    "Expected {other_type} to match the type of {expected_type}"
                                 ),
                             ));
                         }
@@ -247,7 +245,7 @@ fn call_function<'a>(
                 if !attempted_type.matches(arg_type) {
                     return Err(Rich::custom(
                         *span,
-                        format!("Expected {arg:?} to match the type of {arg_name} ({arg_type:?})"),
+                        format!("Expected {arg:?} to match the type of {arg_name} ({arg_type})"),
                     ));
                 }
                 check_used_generic(arg_type, attempted_type, &mut generic_types_map, span)?;

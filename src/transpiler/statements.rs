@@ -258,7 +258,7 @@ pub fn assignment<'state, 'src: 'state>(
         if !attempted_type.matches(expr_type) {
             return Err(Rich::custom(
                 value.1,
-                format!("Type {attempted_type:?} does not match {expr_type:?}"),
+                format!("Type {attempted_type} does not match {expr_type}"),
             ));
         }
     }
@@ -274,7 +274,7 @@ pub fn assignment<'state, 'src: 'state>(
             return Err(Rich::custom(
                 value.1,
                 format!(
-                    "Mismatched types: expected {:?} but found {:?}",
+                    "Mismatched types: expected {} but found {}",
                     var.1, expr_type
                 ),
             ));

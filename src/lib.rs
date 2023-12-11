@@ -3,7 +3,7 @@ use ariadne::{sources, Color, Label, Report, ReportKind};
 use builtins::prelude;
 use chumsky::{prelude::Rich, Parser};
 use parser::Spanned;
-use std::{collections::HashMap, path::PathBuf, process::exit};
+use std::{collections::HashMap, fmt::Display, path::PathBuf, process::exit};
 use transpiler::transpile_from_ast;
 
 mod builtins;
@@ -53,13 +53,25 @@ enum Statement<'src> {
     Empty,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 enum Type {
     Str,
     Num,
     Any,
     Generic(String),
     List(Box<Type>),
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Str => write!(f, "\x1b[35mstring\x1b[39m"),
+            Type::Num => write!(f, "\x1b[35mint\x1b[39m"),
+            Type::Any => write!(f, "\x1b[35mundefined\x1b[39m"),
+            Type::Generic(v) => write!(f, "\x1b[35mGeneric variable {}\x1b[39m", v),
+            Type::List(v) => write!(f, "\x1b[35m[{}]\x1b[39m", v),
+        }
+    }
 }
 
 impl Type {

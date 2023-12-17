@@ -116,6 +116,18 @@ pub fn parse_statement<'src>(
             .map(Statement::Return)
             .labelled("return statement");
 
+        let import_statement = text::keyword("import")
+            .padded()
+            .ignore_then(
+                any()
+                    .filter(|v| v != &'\n')
+                    .repeated()
+                    .collect::<String>()
+                    .map_with(|v, e| (v, e.span())),
+            )
+            .map(Statement::Import)
+            .labelled("import statement");
+
         let function = text::keyword("fun")
             .ignore_then(ident)
             .then(
@@ -175,6 +187,7 @@ pub fn parse_statement<'src>(
             return_statement,
             for_loop,
             while_loop,
+            import_statement,
             local_assignment,
             global_assignment,
             expr.map(Statement::Expression),

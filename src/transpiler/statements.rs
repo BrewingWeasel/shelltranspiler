@@ -183,7 +183,14 @@ done
             Ok((output, run_before))
         }
         Statement::If(if_statement) => transpile_if((&if_statement.0, if_statement.1), state),
-        Statement::Empty => Ok((String::new(), None)),
+        Statement::Empty | Statement::Import(_) => Ok((String::new(), None)),
+        // Statement::Import((module, span)) => {
+        //     let mod_path = PathBuf::from(module);
+        //     let module_code = transpile_from_file(&mod_path).unwrap();
+        //     // state.push_state(new_state);
+        //     // TODO: sda;
+        //     Ok((module_code, None))
+        // }
     }
 }
 

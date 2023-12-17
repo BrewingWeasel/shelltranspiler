@@ -50,6 +50,7 @@ enum Statement<'src> {
     ),
     If(Spanned<IfStatement<'src>>),
     Return(Spanned<Expr<'src>>),
+    Import(Spanned<String>),
     Empty,
 }
 
@@ -331,13 +332,36 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
     };
     let mut state = State::new();
 
+    let mut srcs = Vec::new();
+    let mut new_ast = Vec::new();
+
     match parser().parse(&src).into_result() {
-        Ok(ast) => match transpile_from_ast(&ast, &mut state, true) {
-            Ok(output) => return Some(output),
-            Err(err) => {
-                show_err(&err, filename.to_string_lossy().to_string(), &src);
+        Ok(mut ast) => {
+            for statement in &ast {
+                if let Statement::Import(module) = &statement.0 {
+                    if let Ok(src) = std::fs::read_to_string(&module.0) {
+                        srcs.push(src);
+                    } else {
+                        eprintln!("Unable to read file {}", filename.to_string_lossy());
+                        exit(1);
+                    };
+                }
             }
-        },
+
+            for src in &srcs {
+                let mut other = parser().parse(src).unwrap();
+                new_ast.append(&mut other);
+            }
+
+            new_ast.append(&mut ast);
+
+            match transpile_from_ast(&new_ast, &mut state, true) {
+                Ok(main_output) => return Some(main_output),
+                Err(err) => {
+                    show_err(&err, filename.to_string_lossy().to_string(), &src);
+                }
+            }
+        }
         Err(errors) => {
             for err in errors {
                 show_err(&err, filename.to_string_lossy().to_string(), &src);

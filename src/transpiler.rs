@@ -13,6 +13,7 @@ pub fn transpile_from_ast<'state, 'src: 'state>(
     state: &mut State<'state>,
     main_transpiler: bool,
 ) -> Result<String, Rich<'src, char>> {
+    // eprintln!("{:#?}", conts);
     let mut func_defs = String::new();
     let mut compiled = String::new();
 

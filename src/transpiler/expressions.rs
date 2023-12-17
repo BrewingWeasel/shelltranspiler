@@ -68,6 +68,12 @@ pub fn transpile_expr<'a>(
                     );
                 }
             }
+            // else {
+            //     return Err(Rich::custom(
+            //         expr.1,
+            //         format!("Unable to find function {func}"),
+            //     ));
+            // }
             let var_name = format!("$__{func}_return_value_{}", state.get_times_called(func));
             Ok((
                 var_name,

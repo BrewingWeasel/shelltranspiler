@@ -48,6 +48,18 @@ pub fn expression<'src>(
                 .delimited_by(just('('), just(')')),
         );
 
+        let macro_call = just('@')
+            .ignore_then(ident)
+            .then(
+                expr.clone()
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .map_with(|args, e| (args, e.span()))
+                    .delimited_by(just('('), just(')')),
+            )
+            .map(|(f, args)| Expr::Macro(f, args));
+
         let call_piped = just('<')
             .ignore_then(generic_call.clone())
             .padded()
@@ -75,6 +87,7 @@ pub fn expression<'src>(
                 strvalue,
                 call_piped,
                 call,
+                macro_call,
                 var,
             ))
             .map_with(|expr: Expr, e| -> Spanned<Expr> { (expr, e.span()) });

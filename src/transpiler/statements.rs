@@ -15,7 +15,10 @@ pub fn transpile_statement<'state, 'src: 'state>(
         Statement::Expression(expr) => {
             if matches!(
                 expr.0,
-                Expr::Call(_, _, _) | Expr::CallPiped(_, _, _) | Expr::Pipe(_, _)
+                Expr::Call(_, _, _)
+                    | Expr::CallPiped(_, _, _)
+                    | Expr::Pipe(_, _)
+                    | Expr::Macro(_, _)
             ) {
                 transpile_repr((&expr.0, expr.1), state)
             } else {

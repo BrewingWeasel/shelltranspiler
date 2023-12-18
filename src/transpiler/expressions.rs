@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{get_generic_by_path, parser::Spanned, Expr, State, Type};
+use crate::{get_generic_by_path, macros::transpile_macro, parser::Spanned, Expr, State, Type};
 use chumsky::{
     container::Seq,
     prelude::Rich,
@@ -125,6 +125,7 @@ pub fn transpile_expr<'a>(
             ),
             _ => unreachable!(),
         },
+        Expr::Macro(macro_name, args) => transpile_macro(macro_name, (&args.0, args.1), state),
     }
 }
 

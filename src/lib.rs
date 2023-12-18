@@ -7,6 +7,7 @@ use std::{collections::HashMap, fmt::Display, path::PathBuf, process::exit};
 use transpiler::transpile_from_ast;
 
 mod builtins;
+mod macros;
 mod parser;
 mod transpiler;
 
@@ -137,6 +138,7 @@ enum Expr<'src> {
         Spanned<Vec<Spanned<Expr<'src>>>>,
         Spanned<Vec<(&'src str, Spanned<Expr<'src>>)>>,
     ),
+    Macro(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
     CallPiped(
         &'src str,
         Spanned<Vec<Spanned<Expr<'src>>>>,
@@ -195,6 +197,7 @@ impl<'src> Expr<'src> {
                 Type::Any
             }
             Self::CallPiped(_, _, _) => Type::Any,
+            Self::Macro(_, _) => Type::Any,
             Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),
         }
     }

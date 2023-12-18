@@ -73,6 +73,7 @@ pub fn parse_statement<'src>(
             .then(type_assignment())
             .then_ignore(just('='))
             .then(expr.clone())
+            // .then_ignore(just("end"))
             .labelled("variable assignment");
 
         let comment = just('#')
@@ -182,14 +183,14 @@ pub fn parse_statement<'src>(
             .labelled("function");
 
         choice((
+            local_assignment,
+            global_assignment,
             function,
             if_statement,
             return_statement,
             for_loop,
             while_loop,
             import_statement,
-            local_assignment,
-            global_assignment,
             expr.map(Statement::Expression),
             comment.to(Statement::Empty),
         ))

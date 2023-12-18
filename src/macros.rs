@@ -11,6 +11,7 @@ pub fn transpile_macro<'src>(
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     match macro_name {
         "eval" => eval(args, state),
+        "raw_name" => raw_name(args, state),
         m => Err(Rich::custom(args.1, format!("Unable to find macro {m}"))),
     }
 }
@@ -30,4 +31,31 @@ fn eval<'src>(
         }
     }
     Ok((contents, run_before.into()))
+}
+
+fn raw_name<'src>(
+    args: Spanned<&'src Vec<Spanned<Expr<'src>>>>,
+    state: &mut State,
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    if args.0.len() != 1 {
+        return Err(Rich::custom(
+            args.1,
+            format!("Expected 1 argument, found {}", args.0.len()),
+        ));
+    }
+    if let (Expr::Var(variable), span) = &args.0[0] {
+        if let Some((sh_variable_name, _type)) = state.get_var(&variable) {
+            Ok((format!("\"${sh_variable_name}\""), None))
+        } else {
+            Err(Rich::custom(
+                *span,
+                format!("Could not find variable {}", variable),
+            ))
+        }
+    } else {
+        Err(Rich::custom(
+            args.1,
+            format!("Expected string literal found {:?}", args.0[0].0),
+        ))
+    }
 }

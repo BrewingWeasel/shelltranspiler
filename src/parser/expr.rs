@@ -58,6 +58,7 @@ pub fn expression<'src>(
                     .map_with(|args, e| (args, e.span()))
                     .delimited_by(just('('), just(')')),
             )
+            .padded()
             .map(|(f, args)| Expr::Macro(f, args));
 
         let call_piped = just('<')
@@ -85,9 +86,9 @@ pub fn expression<'src>(
                     .then(expr.delimited_by(just('['), just(']')))
                     .map(|(ident, expr)| Expr::ListIndex(ident, Box::new(expr))),
                 strvalue,
+                macro_call,
                 call_piped,
                 call,
-                macro_call,
                 var,
             ))
             .map_with(|expr: Expr, e| -> Spanned<Expr> { (expr, e.span()) });

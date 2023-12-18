@@ -60,6 +60,7 @@ enum Type {
     Str,
     Num,
     Any,
+    None,
     Generic(String),
     List(Box<Type>),
 }
@@ -70,6 +71,7 @@ impl Display for Type {
             Type::Str => write!(f, "\x1b[35mstring\x1b[39m"),
             Type::Num => write!(f, "\x1b[35mint\x1b[39m"),
             Type::Any => write!(f, "\x1b[35mundefined\x1b[39m"),
+            Type::None => write!(f, "\x1b[35mNone\x1b[39m"),
             Type::Generic(v) => write!(f, "\x1b[35mGeneric variable {}\x1b[39m", v),
             Type::List(v) => write!(f, "\x1b[35m[{}]\x1b[39m", v),
         }
@@ -197,7 +199,11 @@ impl<'src> Expr<'src> {
                 Type::Any
             }
             Self::CallPiped(_, _, _) => Type::Any,
-            Self::Macro(_, _) => Type::Any,
+            Self::Macro(m, _) => match *m {
+                "eval" => Type::None,
+                "raw_name" => Type::Str,
+                _ => unreachable!(),
+            },
             Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),
         }
     }

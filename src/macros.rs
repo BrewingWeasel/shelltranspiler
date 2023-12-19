@@ -12,6 +12,7 @@ pub fn transpile_macro<'src>(
     match macro_name {
         "eval" => eval(args, state),
         "raw_name" => raw_name(args, state),
+        "into_str" => into_str(args, state),
         m => Err(Rich::custom(args.1, format!("Unable to find macro {m}"))),
     }
 }
@@ -31,6 +32,19 @@ fn eval<'src>(
         }
     }
     Ok((contents, run_before.into()))
+}
+
+fn into_str<'src>(
+    args: Spanned<&'src Vec<Spanned<Expr<'src>>>>,
+    state: &mut State,
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    if args.0.len() != 1 {
+        return Err(Rich::custom(
+            args.1,
+            format!("Expected 1 argument, found {}", args.0.len()),
+        ));
+    }
+    transpile_expr((&args.0[0].0, args.0[0].1), state)
 }
 
 fn raw_name<'src>(

@@ -202,6 +202,7 @@ impl<'src> Expr<'src> {
             Self::Macro(m, _) => match *m {
                 "eval" => Type::None,
                 "raw_name" => Type::Str,
+                "into_str" => Type::Str,
                 _ => unreachable!(),
             },
             Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),

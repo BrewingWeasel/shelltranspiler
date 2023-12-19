@@ -4,7 +4,7 @@ use crate::{parser::Spanned, Function, State, Statement};
 
 use self::statements::transpile_statement;
 
-pub use expressions::{transpile_expr, transpile_repr};
+pub use expressions::transpile_expr;
 
 mod condition;
 mod expressions;

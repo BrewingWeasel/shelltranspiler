@@ -157,10 +157,11 @@ done
         Statement::For(var, loop_name, body) => {
             if let Type::List(looped_item_type) = loop_name.0.get_type(state) {
                 let (list_refr, run_before) = transpile_repr((&loop_name.0, loop_name.1), state)?;
+                let list_refr = list_refr.trim_matches(['$', '"']);
                 let index_value = state.new_for_loop_index();
                 let mut output = format!(
-                    r#"{}=0; while eval "{}=\"\${{$(echo {})_$(echo "${}")?unset}}\"" 2> /dev/null; do"#,
-                    &index_value, var, list_refr, &index_value
+                    r#"{}=0; while eval "{}=\"\${{${{{}}}_${{{}}}}}\"; [ ${} -lt \"\$${{{}}}_len\" ]"; do"#,
+                    &index_value, var, list_refr, &index_value, &index_value, list_refr
                 );
                 output.push('\n');
                 state

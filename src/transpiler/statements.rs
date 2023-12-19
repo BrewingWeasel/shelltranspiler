@@ -97,6 +97,13 @@ shift
 "#,
                         kwarg.ident, kwarg.ident
                     ));
+                    state.scopes.last_mut().unwrap().vars.insert(
+                        kwarg.ident.to_owned(),
+                        (
+                            kwarg.ident.to_owned(),
+                            kwarg.kwarg_type.clone().unwrap_or(Type::Any),
+                        ),
+                    );
                 }
                 case_statement.push_str(
                     "*)

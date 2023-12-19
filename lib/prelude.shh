@@ -1,0 +1,32 @@
+fun len<v>(list: [%v]) -> int {
+  return "$" + @raw_name(list) + "_len"
+}
+
+fun push<v>(list: [%v], new_elem: %v) {
+  var len = @raw_name(list) + "_len"
+  @eval("eval", @raw_name(list) + "_" + my_len(list) + "=" + new_elem)
+  @eval("eval", len + "=$((" + len + " + 1))")
+}
+
+fun pop<v>(list: [%v], | index_to_pop: int = -1) -> %v {
+  # negative numbers wrap around to the other side
+  if index_to_pop < 0 {
+    index_to_pop = len(list) + index_to_pop
+  }
+
+  var value = list[index_to_pop]
+  var index_to_shuffle: int = index_to_pop
+  var list_len = len(list)
+
+  # move each part of list, starting at the index popped
+  while index_to_shuffle < list_len {
+    var next_index = index_to_shuffle + 1
+    @eval("eval", @raw_name(list) + "_" + @into_str(index_to_shuffle) + "=$" + @raw_name(list) + "_" + @into_str(next_index))
+    index_to_shuffle = next_index
+  }
+
+  # subtract one from length
+  var len_v = @raw_name(list) + "_len"
+  @eval("eval", len_v + "=$((" + len_v + " - 1))")
+  return value
+}

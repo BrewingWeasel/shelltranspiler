@@ -1,6 +1,6 @@
 use chumsky::error::Rich;
 
-use crate::transpiler::transpile_repr;
+use crate::transpiler::transpile_expr;
 use crate::State;
 use crate::{parser::Spanned, Expr};
 
@@ -23,7 +23,7 @@ fn eval<'src>(
     let mut contents = String::new();
     let mut run_before = String::new();
     for expr in args.0 {
-        let (new_conts, new_run_before) = transpile_repr((&expr.0, expr.1), state)?;
+        let (new_conts, new_run_before) = transpile_expr((&expr.0, expr.1), state)?;
         contents.push_str(&new_conts);
         contents.push(' ');
         if let Some(before) = new_run_before {

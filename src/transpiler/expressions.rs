@@ -143,9 +143,9 @@ fn run_operation<'a>(
             format!("Types being added do not match (found {type1} and {type2})"),
         ));
     }
-    let (first_expr, run_before) = transpile_repr((&first.0, first.1), state)?;
+    let (first_expr, run_before) = transpile_expr((&first.0, first.1), state)?;
     let mut run_before = run_before.unwrap_or_default();
-    let (second_expr, new_run_before) = transpile_repr((&second.0, second.1), state)?;
+    let (second_expr, new_run_before) = transpile_expr((&second.0, second.1), state)?;
     if let Some(run) = new_run_before {
         run_before.push_str(&run);
     }

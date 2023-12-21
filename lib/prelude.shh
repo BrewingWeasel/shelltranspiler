@@ -30,3 +30,19 @@ fun pop<v>(list: [%v], | index_to_pop: int = -1) -> %v {
   @eval("eval", len_v + "=$((" + len_v + " - 1))")
   return value
 }
+
+fun max(x: int, y: int) -> int {
+  if x > y {
+    return x
+  } else {
+    return y
+  }
+}
+
+fun min(x: int, y: int) -> int {
+  if x < y {
+    return x
+  } else {
+    return y
+  }
+}

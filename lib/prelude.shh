@@ -4,7 +4,7 @@ fun len<v>(list: [%v]) -> int {
 
 fun push<v>(list: [%v], new_elem: %v) {
   var len = @raw_name(list) + "_len"
-  @eval("eval", @raw_name(list) + "_" + my_len(list) + "=" + new_elem)
+  @eval("eval", @raw_name(list) + "_" + @into_str(len(list)) + "=" + @into_str(new_elem))
   @eval("eval", len + "=$((" + len + " + 1))")
 }
 

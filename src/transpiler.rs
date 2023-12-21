@@ -36,9 +36,6 @@ pub fn transpile_from_ast<'state, 'src: 'state>(
                 func_defs.push('\n');
             }
         };
-        for func in &state.prelude.functions {
-            compile_function(func.1);
-        }
 
         for func in &state
             .scopes

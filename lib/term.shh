@@ -1,0 +1,19 @@
+fun cursor_up(i: int) {
+  echo("\033[" + @into_str(i) + "A")
+}
+
+fun cursor_down(i: int) {
+  echo("\033[" + @into_str(i) + "B")
+}
+
+fun cursor_left(i: int) {
+  echo("\033[" + @into_str(i) + "D")
+}
+
+fun cursor_right(i: int) {
+  echo("\033[" + @into_str(i) + "C")
+}
+
+fun cursor_to_coords(x: int, y: int) {
+  echo("\033[" + @into_str(x) + ";" + @into_str(y) + "H")
+}

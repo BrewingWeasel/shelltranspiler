@@ -1,12 +1,10 @@
 use crate::parser::parser;
 use ariadne::{sources, Color, Label, Report, ReportKind};
-use builtins::prelude;
 use chumsky::{prelude::Rich, Parser};
 use parser::Spanned;
-use std::{collections::HashMap, fmt::Display, path::PathBuf, process::exit};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, path::PathBuf, process::exit};
 use transpiler::transpile_from_ast;
 
-mod builtins;
 mod macros;
 mod parser;
 mod transpiler;
@@ -228,7 +226,6 @@ fn get_generic_by_path(path_to_generic: &[PathToValue], mut ty: Type) -> Type {
 #[derive(Debug, Clone)]
 struct State<'src> {
     scopes: Vec<Scope<'src>>,
-    prelude: Scope<'src>,
     list_num: usize,
     times_ran_for_loop: usize,
 }
@@ -237,7 +234,6 @@ impl<'src> State<'src> {
     fn new() -> Self {
         Self {
             scopes: vec![Scope::new("global", None)],
-            prelude: prelude(),
             list_num: 0,
             times_ran_for_loop: 0,
         }
@@ -257,7 +253,7 @@ impl<'src> State<'src> {
                 return Some(real_var);
             }
         }
-        self.prelude.vars.get(variable_name)
+        None
     }
 
     fn get_func(&self, function: &str) -> Option<&Function> {
@@ -266,7 +262,7 @@ impl<'src> State<'src> {
                 return Some(real_var);
             }
         }
-        self.prelude.functions.get(function)
+        None
     }
 
     fn call_func(&mut self, function: &str) {
@@ -275,9 +271,6 @@ impl<'src> State<'src> {
                 real_var.times_called += 1;
                 break;
             }
-        }
-        if let Some(real_var) = self.prelude.functions.get_mut(function) {
-            real_var.times_called += 1;
         }
     }
 
@@ -342,19 +335,25 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
     };
     let mut state = State::new();
 
-    let mut srcs = Vec::new();
+    let mut srcs = vec![Cow::Borrowed(include_str!("../lib/prelude.shh"))];
     let mut new_ast = Vec::new();
 
     match parser().parse(&src).into_result() {
         Ok(mut ast) => {
             for statement in &ast {
                 if let Statement::Import(module) = &statement.0 {
-                    if let Ok(src) = std::fs::read_to_string(&module.0) {
-                        srcs.push(src);
-                    } else {
-                        eprintln!("Unable to read file {}", filename.to_string_lossy());
-                        exit(1);
+                    let src = match module.0.as_str() {
+                        "term" => Cow::Borrowed(include_str!("../lib/term.shh")),
+                        user_module => {
+                            if let Ok(src) = std::fs::read_to_string(user_module) {
+                                Cow::Owned(src)
+                            } else {
+                                eprintln!("Unable to read file {}", filename.to_string_lossy());
+                                exit(1);
+                            }
+                        }
                     };
+                    srcs.push(src);
                 }
             }
 

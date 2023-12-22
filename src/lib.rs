@@ -50,6 +50,7 @@ enum Statement<'src> {
     If(Spanned<IfStatement<'src>>),
     Return(Spanned<Expr<'src>>),
     Import(Spanned<String>),
+    Pub(Spanned<Box<Statement<'src>>>),
     Empty,
 }
 
@@ -358,7 +359,18 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
             }
 
             for src in &srcs {
-                let mut other = parser().parse(src).unwrap();
+                let mut other = parser()
+                    .parse(src)
+                    .unwrap()
+                    .into_iter()
+                    .filter_map(|v| {
+                        if let Statement::Pub(statement) = v.0 {
+                            Some((*statement.0, statement.1))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 new_ast.append(&mut other);
             }
 

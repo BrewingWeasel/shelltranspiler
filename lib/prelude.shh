@@ -1,14 +1,14 @@
-fun len<v>(list: [%v]) -> int {
+pub fun len<v>(list: [%v]) -> int {
   return "$" + @raw_name(list) + "_len"
 }
 
-fun push<v>(list: [%v], new_elem: %v) {
+pub fun push<v>(list: [%v], new_elem: %v) {
   var len = @raw_name(list) + "_len"
   @eval("eval", @raw_name(list) + "_" + @into_str(len(list)) + "=" + @into_str(new_elem))
   @eval("eval", len + "=$((" + len + " + 1))")
 }
 
-fun pop<v>(list: [%v], | index_to_pop: int = -1) -> %v {
+pub fun pop<v>(list: [%v], | index_to_pop: int = -1) -> %v {
   # negative numbers wrap around to the other side
   if index_to_pop < 0 {
     index_to_pop = len(list) + index_to_pop
@@ -31,7 +31,7 @@ fun pop<v>(list: [%v], | index_to_pop: int = -1) -> %v {
   return value
 }
 
-fun max(x: int, y: int) -> int {
+pub fun max(x: int, y: int) -> int {
   if x > y {
     return x
   } else {
@@ -39,7 +39,7 @@ fun max(x: int, y: int) -> int {
   }
 }
 
-fun min(x: int, y: int) -> int {
+pub fun min(x: int, y: int) -> int {
   if x < y {
     return x
   } else {

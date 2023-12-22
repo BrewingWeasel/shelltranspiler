@@ -182,7 +182,13 @@ pub fn parse_statement<'src>(
             })
             .labelled("function");
 
+        let public_statement = text::keyword("pub")
+            .padded()
+            .ignore_then(statement)
+            .map_with(|s, e| Statement::Pub((Box::new(s), e.span())));
+
         choice((
+            public_statement,
             local_assignment,
             global_assignment,
             function,

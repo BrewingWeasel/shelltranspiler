@@ -351,13 +351,15 @@ fn show_err(err: &Rich<'_, char>, filename: String, src: &str) {
 
 #[must_use]
 pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
-    let Ok(src) = std::fs::read_to_string(filename) else {
+    let src = if let Ok(src) = std::fs::read_to_string(filename) {
+        format!("{}\n{src}", include_str!("../lib/prelude.shh"))
+    } else {
         eprintln!("Unable to read file {}", filename.to_string_lossy());
         exit(1);
     };
     let mut state = State::new();
 
-    let mut srcs = vec![("prelude", Cow::Borrowed(include_str!("../lib/prelude.shh")))];
+    let mut srcs = Vec::new();
     let mut mod_asts = Vec::new();
 
     match parser().parse(&src).into_result() {

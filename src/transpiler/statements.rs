@@ -143,7 +143,7 @@ done
                     state,
                 )?;
                 output.push_str(&format!(
-                    "\neval \"__{func_name}_return_value_$__n_timecalled=\\\"$__return_val\\\"\""
+                    "\neval \"__{}_{func_name}_return_value_$__n_timecalled=\\\"$__return_val\\\"\"", state.name
                 ));
                 output.push_str("\nreturn 0");
                 Ok((output, run_before))

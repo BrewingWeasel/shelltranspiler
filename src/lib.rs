@@ -243,6 +243,7 @@ fn get_generic_by_path(path_to_generic: &[PathToValue], mut ty: Type) -> Type {
 
 #[derive(Debug, Clone)]
 struct State<'src> {
+    name: &'src str,
     scopes: Vec<Scope<'src>>,
     list_num: usize,
     times_ran_for_loop: usize,
@@ -252,6 +253,7 @@ struct State<'src> {
 impl<'src> State<'src> {
     fn new() -> Self {
         Self {
+            name: "",
             scopes: vec![Scope::new("global", None)],
             list_num: 0,
             times_ran_for_loop: 0,
@@ -396,6 +398,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
 
             for (mod_name, mod_ast) in &mod_asts {
                 let mut mini_state = State {
+                    name: mod_name,
                     scopes: vec![Scope::new("module", None)],
                     list_num: state.list_num,
                     times_ran_for_loop: state.times_ran_for_loop,

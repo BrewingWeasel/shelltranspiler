@@ -72,7 +72,11 @@ pub fn transpile_expr<'src>(
                     format!("Unable to find function {func}"),
                 ));
             }
-            let var_name = format!("$__{func}_return_value_{}", state.get_times_called(func));
+            let var_name = format!(
+                "$__{}_{func}_return_value_{}",
+                state.name,
+                state.get_times_called(func)
+            );
             Ok((
                 var_name,
                 Some(call_function(
@@ -84,8 +88,11 @@ pub fn transpile_expr<'src>(
                 )?),
             ))
         }
-        Expr::CallModule(module, func, args, kwargs) => {
-            if let Some(f) = state.modules.get(module).and_then(|s| s.get_func(func)) {
+        Expr::CallModule(module_name, func, args, kwargs) => {
+            let Some(module) = state.modules.get(module_name) else {
+                return Err(Rich::custom(expr.1, format!("Unable to find module {module_name}")))
+            };
+            if let Some(f) = module.get_func(func) {
                 if f.return_value.is_none() {
                     return Err(Rich::custom(
                         expr.1,
@@ -99,18 +106,15 @@ pub fn transpile_expr<'src>(
                 ));
             }
             let var_name = format!(
-                "$__{func}_return_value_{}",
-                state
-                    .modules
-                    .get(module)
-                    .expect("module already checked")
-                    .get_times_called(func)
+                "$__{}_{func}_return_value_{}",
+                module.name,
+                module.get_times_called(func)
             );
             Ok((
                 var_name,
                 Some(call_function(
                     func,
-                    Some(module),
+                    Some(module_name),
                     (&args.0, args.1),
                     (&kwargs.0, kwargs.1),
                     state,
@@ -385,7 +389,7 @@ mod tests {
                 &mut state
             ),
             Ok((
-                String::from("$__returns_str_return_value_2"),
+                String::from("$___returns_str_return_value_2"),
                 Some(String::from("returns_str 2"))
             ))
         );

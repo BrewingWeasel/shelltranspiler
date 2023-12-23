@@ -61,7 +61,9 @@ pub fn transpile_statement<'state, 'src: 'state>(
                 );
             }
 
-            let mut output = String::from(*ident);
+            let mut output = String::from(state.name);
+            output.push('_');
+            output.push_str(ident);
             output.push_str(
                 "() {
 local __n_timecalled=$1

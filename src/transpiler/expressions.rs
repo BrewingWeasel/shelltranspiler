@@ -290,7 +290,7 @@ fn call_function<'a>(
             check_used_generic(arg_type, attempted_type, &mut generic_types_map, span)?;
         }
     }
-    let mut function_call_output = String::from(f);
+    let mut function_call_output = format!("{}_{f}", mini_state.name);
     function_call_output.push(' ');
     function_call_output.push_str(&mini_state.get_times_called(f));
     mini_state.call_func(f);

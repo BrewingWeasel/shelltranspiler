@@ -45,6 +45,16 @@ pub fn transpile_from_ast<'state, 'src: 'state>(
         {
             compile_function(func.1);
         }
+        for (_, mod_scope) in &state.modules {
+            for func in &mod_scope
+                .scopes
+                .last()
+                .expect("global scope should always exist")
+                .functions
+            {
+                compile_function(func.1);
+            }
+        }
     }
 
     Ok(func_defs + &compiled)

@@ -61,12 +61,14 @@ pub fn expression<'src>(
             .padded()
             .map(|(f, args)| Expr::Macro(f, args));
 
-        let call_piped = just('<')
-            .ignore_then(generic_call.clone())
-            .padded()
-            .map(|(f, (args, kwargs))| Expr::CallPiped(f, args, kwargs));
+        let call = generic_call
+            .clone()
+            .map(|(f, (args, kwargs))| Expr::Call(f, args, kwargs));
 
-        let call = generic_call.map(|(f, (args, kwargs))| Expr::Call(f, args, kwargs));
+        let call_from_module = ident
+            .then_ignore(just('.'))
+            .then(generic_call)
+            .map(|(module, (f, (args, kwargs)))| Expr::CallModule(module, f, args, kwargs));
 
         recursive(|part| {
             let atom = choice((
@@ -80,14 +82,13 @@ pub fn expression<'src>(
                     .collect::<Vec<_>>()
                     .delimited_by(just('['), just(']'))
                     .map_with(|values, e| Expr::List((values, e.span())))
-                    // jasdlkfjasdklj
                     .padded(),
                 ident
                     .then(expr.delimited_by(just('['), just(']')))
                     .map(|(ident, expr)| Expr::ListIndex(ident, Box::new(expr))),
                 strvalue,
                 macro_call,
-                call_piped,
+                call_from_module,
                 call,
                 var,
             ))

@@ -7,13 +7,12 @@ use chumsky::{
     span::{SimpleSpan, Span},
 };
 
-pub fn transpile_expr<'a>(
-    expr: Spanned<&'a Expr>,
+pub fn transpile_expr<'src>(
+    expr: Spanned<&'src Expr>,
     state: &mut State,
-) -> Result<(String, Option<String>), Rich<'a, char>> {
+) -> Result<(String, Option<String>), Rich<'src, char>> {
     match expr.0 {
-        Expr::Num(x) => Ok((format!("{x}"), None)), // HACK: should have quotes but that breaks
-        // indexing
+        Expr::Num(x) => Ok((format!("{x}"), None)),
         Expr::Str(s) => Ok((format!("'{s}'"), None)),
         Expr::List(elements) => {
             let list_pointer = state.new_list_pointer();
@@ -67,34 +66,56 @@ pub fn transpile_expr<'a>(
                         format!("Function {func} does not have a return value. Maybe you meant to call it piped? (<{func})"))
                     );
                 }
+            } else {
+                return Err(Rich::custom(
+                    expr.1,
+                    format!("Unable to find function {func}"),
+                ));
             }
-            // else {
-            //     return Err(Rich::custom(
-            //         expr.1,
-            //         format!("Unable to find function {func}"),
-            //     ));
-            // }
             let var_name = format!("$__{func}_return_value_{}", state.get_times_called(func));
             Ok((
                 var_name,
                 Some(call_function(
                     func,
+                    None,
                     (&args.0, args.1),
                     (&kwargs.0, kwargs.1),
                     state,
                 )?),
             ))
         }
-        Expr::CallPiped(f, args, kwargs) => {
-            let mut output = String::from("$(");
-            output.push_str(&call_function(
-                f,
-                (&args.0, args.1),
-                (&kwargs.0, kwargs.1),
-                state,
-            )?);
-            output.push(')');
-            Ok((output, None))
+        Expr::CallModule(module, func, args, kwargs) => {
+            if let Some(f) = state.modules.get(module).and_then(|s| s.get_func(func)) {
+                if f.return_value.is_none() {
+                    return Err(Rich::custom(
+                        expr.1,
+                        format!("Function {func} does not have a return value"),
+                    ));
+                }
+            } else {
+                return Err(Rich::custom(
+                    expr.1,
+                    format!("Unable to find function {func}"),
+                ));
+            }
+            let var_name = format!(
+                "$__{func}_return_value_{}",
+                state
+                    .modules
+                    .get(module)
+                    .expect("module already checked")
+                    .get_times_called(func)
+            );
+            Ok((
+                var_name,
+                Some(call_function(
+                    func,
+                    Some(module),
+                    (&args.0, args.1),
+                    (&kwargs.0, kwargs.1),
+                    state,
+                )?),
+            ))
         }
         Expr::Pipe(first, second) => {
             let mut output = String::from("$(");
@@ -147,6 +168,7 @@ fn run_operation<'a>(
     let mut run_before = run_before.unwrap_or_default();
     let (second_expr, new_run_before) = transpile_expr((&second.0, second.1), state)?;
     if let Some(run) = new_run_before {
+        run_before.push('\n');
         run_before.push_str(&run);
     }
     if let Some(format) = operations.get(&type1) {
@@ -168,6 +190,7 @@ fn run_operation<'a>(
 
 fn call_function<'a>(
     f: &str,
+    module: Option<&str>,
     args: Spanned<&'a Vec<Spanned<Expr>>>,
     kwargs: Spanned<&'a Vec<(&'a str, Spanned<Expr>)>>,
     state: &mut State,
@@ -198,70 +221,75 @@ fn call_function<'a>(
         Ok(())
     };
 
-    if let Some(func) = state.get_func(f) {
-        if args.len() != func.args.len() {
-            let span = match args.len() {
-                0 => args_span,
-                1 => args.first().unwrap().1,
-                _ => args.first().unwrap().1.union(args.last().unwrap().1),
-            };
+    let mini_state: &mut State = if let Some(mod_loc) = module {
+        state
+            .modules
+            .get_mut(mod_loc)
+            .expect("already checked for module def")
+    } else {
+        state
+    };
+
+    let func = mini_state
+        .get_func(f)
+        .expect("already tried to get function");
+
+    if args.len() != func.args.len() {
+        let span = match args.len() {
+            0 => args_span,
+            1 => args.first().unwrap().1,
+            _ => args.first().unwrap().1.union(args.last().unwrap().1),
+        };
+        return Err(Rich::custom(
+            span,
+            format!(
+                "{f} expected {} arguments, but got {}",
+                func.args.len(),
+                args.len()
+            ),
+        ));
+    }
+    let mut generic_types_map = HashMap::new();
+    for (kwarg_ident, (expr, span)) in kwargs {
+        let mut known_kwarg = false;
+        for real_kwarg in &func.kwargs {
+            if &real_kwarg.ident == kwarg_ident {
+                if let Some(expected_type) = &real_kwarg.kwarg_type {
+                    let other_type = &expr.get_type(mini_state);
+                    if !expected_type.matches(other_type) {
+                        return Err(Rich::custom(
+                            *span,
+                            format!("Expected {other_type} to match the type of {expected_type}"),
+                        ));
+                    }
+                    check_used_generic(expected_type, other_type, &mut generic_types_map, span)?;
+                }
+                known_kwarg = true;
+            }
+        }
+        if !known_kwarg {
             return Err(Rich::custom(
-                span,
-                format!(
-                    "{f} expected {} arguments, but got {}",
-                    func.args.len(),
-                    args.len()
-                ),
+                *span,
+                format!("Kwarg {} not found", &kwarg_ident,),
             ));
         }
-        let mut generic_types_map = HashMap::new();
-        for (kwarg_ident, (expr, span)) in kwargs {
-            let mut known_kwarg = false;
-            for real_kwarg in &func.kwargs {
-                if &real_kwarg.ident == kwarg_ident {
-                    if let Some(expected_type) = &real_kwarg.kwarg_type {
-                        let other_type = &expr.get_type(state);
-                        if !expected_type.matches(other_type) {
-                            return Err(Rich::custom(
-                                *span,
-                                format!(
-                                    "Expected {other_type} to match the type of {expected_type}"
-                                ),
-                            ));
-                        }
-                        check_used_generic(
-                            expected_type,
-                            other_type,
-                            &mut generic_types_map,
-                            span,
-                        )?;
-                    }
-                    known_kwarg = true;
-                }
-            }
-            if !known_kwarg {
+    }
+    for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(func.args.iter()) {
+        if let Some(arg_type) = possible_arg_type {
+            let attempted_type = &arg.get_type(mini_state);
+            if !attempted_type.matches(arg_type) {
                 return Err(Rich::custom(
                     *span,
-                    format!("Kwarg {} not found", &kwarg_ident,),
+                    format!("Expected {arg:?} to match the type of {arg_name} ({arg_type})"),
                 ));
             }
-        }
-        for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(func.args.iter()) {
-            if let Some(arg_type) = possible_arg_type {
-                let attempted_type = &arg.get_type(state);
-                if !attempted_type.matches(arg_type) {
-                    return Err(Rich::custom(
-                        *span,
-                        format!("Expected {arg:?} to match the type of {arg_name} ({arg_type})"),
-                    ));
-                }
-                check_used_generic(arg_type, attempted_type, &mut generic_types_map, span)?;
-            }
+            check_used_generic(arg_type, attempted_type, &mut generic_types_map, span)?;
         }
     }
     let mut function_call_output = String::from(f);
     function_call_output.push(' ');
-    function_call_output.push_str(&state.get_times_called(f));
+    function_call_output.push_str(&mini_state.get_times_called(f));
+    mini_state.call_func(f);
     for (kwarg, (expr, span)) in kwargs {
         function_call_output.push_str(&format!(" --{kwarg} "));
         let (normal_expr, run_before) = transpile_expr((expr, *span), state)?;
@@ -281,7 +309,6 @@ fn call_function<'a>(
         function_call_output.push_str(&normal_expr);
     }
     output.push_str(&function_call_output);
-    state.call_func(f);
     Ok(output)
 }
 
@@ -291,7 +318,11 @@ pub fn transpile_repr<'a>(
 ) -> Result<(String, Option<String>), Rich<'a, char>> {
     match expr.0 {
         Expr::Call(f, args, kwargs) => {
-            call_function(f, (&args.0, args.1), (&kwargs.0, kwargs.1), state).map(|v| (v, None))
+            if state.get_func(f).is_none() {
+                return Err(Rich::custom(expr.1, format!("Unable to find function {f}")));
+            }
+            call_function(f, None, (&args.0, args.1), (&kwargs.0, kwargs.1), state)
+                .map(|v| (v, None))
         }
         Expr::Pipe(first, second) => {
             let (mut output, mut run_before) = transpile_repr((&first.0, first.1), state)?;

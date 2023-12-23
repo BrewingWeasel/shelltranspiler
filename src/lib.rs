@@ -139,12 +139,13 @@ enum Expr<'src> {
         Spanned<Vec<Spanned<Expr<'src>>>>,
         Spanned<Vec<(&'src str, Spanned<Expr<'src>>)>>,
     ),
-    Macro(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
-    CallPiped(
+    CallModule(
+        &'src str,
         &'src str,
         Spanned<Vec<Spanned<Expr<'src>>>>,
         Spanned<Vec<(&'src str, Spanned<Expr<'src>>)>>,
     ),
+    Macro(&'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
     Pipe(Box<Spanned<Expr<'src>>>, Box<Spanned<Expr<'src>>>),
     Operation(
         &'src str,
@@ -172,32 +173,20 @@ impl<'src> Expr<'src> {
             Self::Var(v) => state.get_var(v).map_or(Type::Any, |var| var.1.clone()),
             Self::Call(func, (args, _), _) => {
                 if let Some(fun) = state.get_func(func) {
-                    if let Some(return_v) = &fun.return_value {
-                        if let Type::Generic(generic_v) = return_v {
-                            return args
-                                .iter()
-                                .zip(fun.args.iter())
-                                .find_map(|((attempted_arg, _), (_, arg_type))| {
-                                    if let Some((real_generic_v, path_to_generic)) =
-                                        arg_type.as_ref().and_then(|v| v.get_generic_var())
-                                    {
-                                        if generic_v == real_generic_v {
-                                            return Some(get_generic_by_path(
-                                                &path_to_generic,
-                                                attempted_arg.get_type(state),
-                                            ));
-                                        }
-                                    }
-                                    None
-                                })
-                                .unwrap_or(Type::Any);
-                        }
-                        return return_v.clone();
+                    if let Some(value) = get_fun_return_type(fun, args, state) {
+                        return value;
                     }
                 }
                 Type::Any
             }
-            Self::CallPiped(_, _, _) => Type::Any,
+            Self::CallModule(module, func, (args, _), _) => {
+                if let Some(fun) = state.modules.get(module).and_then(|s| s.get_func(func)) {
+                    if let Some(value) = get_fun_return_type(fun, args, state) {
+                        return value;
+                    }
+                }
+                Type::Any
+            }
             Self::Macro(m, _) => match *m {
                 "eval" => Type::None,
                 "raw_name" => Type::Str,
@@ -207,6 +196,34 @@ impl<'src> Expr<'src> {
             Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),
         }
     }
+}
+
+fn get_fun_return_type(
+    fun: &Function<'_>,
+    args: &Vec<(Expr<'_>, chumsky::prelude::SimpleSpan)>,
+    state: &State<'_>,
+) -> Option<Type> {
+    if let Some(return_v) = &fun.return_value {
+        if let Type::Generic(generic_v) = return_v {
+            return args.iter().zip(fun.args.iter()).find_map(
+                |((attempted_arg, _), (_, arg_type))| {
+                    if let Some((real_generic_v, path_to_generic)) =
+                        arg_type.as_ref().and_then(|v| v.get_generic_var())
+                    {
+                        if generic_v == real_generic_v {
+                            return Some(Some(get_generic_by_path(
+                                &path_to_generic,
+                                attempted_arg.get_type(state),
+                            )));
+                        }
+                    }
+                    None
+                },
+            )?;
+        }
+        return Some(return_v.clone());
+    }
+    None
 }
 
 fn get_generic_by_path(path_to_generic: &[PathToValue], mut ty: Type) -> Type {
@@ -229,6 +246,7 @@ struct State<'src> {
     scopes: Vec<Scope<'src>>,
     list_num: usize,
     times_ran_for_loop: usize,
+    modules: HashMap<&'src str, Box<State<'src>>>,
 }
 
 impl<'src> State<'src> {
@@ -237,6 +255,7 @@ impl<'src> State<'src> {
             scopes: vec![Scope::new("global", None)],
             list_num: 0,
             times_ran_for_loop: 0,
+            modules: HashMap::new(),
         }
     }
 
@@ -336,11 +355,12 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
     };
     let mut state = State::new();
 
-    let mut srcs = vec![Cow::Borrowed(include_str!("../lib/prelude.shh"))];
-    let mut new_ast = Vec::new();
+    let mut srcs = vec![("prelude", Cow::Borrowed(include_str!("../lib/prelude.shh")))];
+    let mut mod_asts = Vec::new();
 
     match parser().parse(&src).into_result() {
-        Ok(mut ast) => {
+        Ok(ast) => {
+            let mut output = String::new();
             for statement in &ast {
                 if let Statement::Import(module) = &statement.0 {
                     let src = match module.0.as_str() {
@@ -354,12 +374,12 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                             }
                         }
                     };
-                    srcs.push(src);
+                    srcs.push((module.0.as_str(), src));
                 }
             }
 
-            for src in &srcs {
-                let mut other = parser()
+            for (mod_name, src) in &srcs {
+                let mod_ast = parser()
                     .parse(src)
                     .unwrap()
                     .into_iter()
@@ -371,13 +391,31 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                         }
                     })
                     .collect();
-                new_ast.append(&mut other);
+                mod_asts.push((mod_name, mod_ast));
             }
 
-            new_ast.append(&mut ast);
+            for (mod_name, mod_ast) in &mod_asts {
+                let mut mini_state = State {
+                    scopes: vec![Scope::new("module", None)],
+                    list_num: state.list_num,
+                    times_ran_for_loop: state.times_ran_for_loop,
+                    modules: HashMap::new(),
+                };
+                let generated = match transpile_from_ast(&mod_ast, &mut mini_state, true) {
+                    Ok(main_output) => main_output,
+                    Err(err) => {
+                        show_err(&err, filename.to_string_lossy().to_string(), &src);
+                        return None;
+                    }
+                };
+                state.list_num += mini_state.list_num;
+                state.times_ran_for_loop += mini_state.times_ran_for_loop;
+                output.push_str(&generated);
+                state.modules.insert(mod_name, Box::from(mini_state));
+            }
 
-            match transpile_from_ast(&new_ast, &mut state, true) {
-                Ok(main_output) => return Some(main_output),
+            match transpile_from_ast(&ast, &mut state, true) {
+                Ok(main_output) => return Some(output + &main_output),
                 Err(err) => {
                     show_err(&err, filename.to_string_lossy().to_string(), &src);
                 }

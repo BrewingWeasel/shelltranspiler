@@ -16,7 +16,7 @@ pub fn transpile_statement<'state, 'src: 'state>(
             if matches!(
                 expr.0,
                 Expr::Call(_, _, _)
-                    | Expr::CallPiped(_, _, _)
+                    | Expr::CallModule(_, _, _, _)
                     | Expr::Pipe(_, _)
                     | Expr::Macro(_, _)
             ) {

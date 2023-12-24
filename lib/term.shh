@@ -1,19 +1,19 @@
 pub fun cursor_up(i: int) {
-  echo("\033[" + @into_str(i) + "A")
+  @print("\033[{}A", i)
 }
 
 pub fun cursor_down(i: int) {
-  echo("\033[" + @into_str(i) + "B")
+  @print("\033[{}B", i)
 }
 
 pub fun cursor_left(i: int) {
-  echo("\033[" + @into_str(i) + "D")
+  @print("\033[{}D", i)
 }
 
 pub fun cursor_right(i: int) {
-  echo("\033[" + @into_str(i) + "C")
+  @print("\033[{}C", i)
 }
 
 pub fun cursor_to_coords(x: int, y: int) {
-  echo("\033[" + @into_str(x) + ";" + @into_str(y) + "H")
+  @print("\033[{};{}H", x, y)
 }

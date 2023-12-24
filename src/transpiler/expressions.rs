@@ -14,6 +14,14 @@ pub fn transpile_expr<'src>(
     match expr.0 {
         Expr::Num(x) => Ok((format!("{x}"), None)),
         Expr::Str(s) => Ok((format!("'{s}'"), None)),
+        Expr::Bool(b) => Ok((
+            if *b {
+                String::from("1")
+            } else {
+                String::from("0")
+            },
+            None,
+        )),
         Expr::List(elements) => {
             let list_pointer = state.new_list_pointer();
             let (mut output, mut add_before) = (String::new(), String::new());

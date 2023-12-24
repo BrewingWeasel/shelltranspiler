@@ -58,6 +58,7 @@ enum Statement<'src> {
 enum Type {
     Str,
     Num,
+    Bool,
     Any,
     None,
     Generic(String),
@@ -69,6 +70,7 @@ impl Display for Type {
         match self {
             Type::Str => write!(f, "\x1b[35mstring\x1b[39m"),
             Type::Num => write!(f, "\x1b[35mint\x1b[39m"),
+            Type::Bool => write!(f, "\x1b[35mbool\x1b[39m"),
             Type::Any => write!(f, "\x1b[35mundefined\x1b[39m"),
             Type::None => write!(f, "\x1b[35mNone\x1b[39m"),
             Type::Generic(v) => write!(f, "\x1b[35mGeneric variable {}\x1b[39m", v),
@@ -131,6 +133,7 @@ enum ContinueIfStatement<'src> {
 enum Expr<'src> {
     Num(i64), // TODO: float
     Str(String),
+    Bool(bool),
     List(Spanned<Vec<Spanned<Expr<'src>>>>),
     ListIndex(&'src str, Box<Spanned<Expr<'src>>>),
     Var(&'src str),
@@ -159,6 +162,7 @@ impl<'src> Expr<'src> {
         match self {
             Self::Num(_) => Type::Num,
             Self::Str(_) => Type::Str,
+            Self::Bool(_) => Type::Bool,
             Self::List(v) => Type::List(
                 v.0.first()
                     .map_or(Box::new(Type::Any), |v| Box::new(v.0.get_type(state))),

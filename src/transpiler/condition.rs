@@ -1,14 +1,24 @@
-use crate::{parser::Spanned, Condition, State};
+use crate::{parser::Spanned, Condition, State, Type};
 use chumsky::prelude::Rich;
 
-use super::expressions::{transpile_expr, transpile_repr};
+use super::expressions::transpile_expr;
 
 pub fn transpile_condition<'src>(
     condition: Spanned<&'src Condition>,
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     match condition.0 {
-        Condition::Expression(expr) => transpile_repr((&expr.0, condition.1), state),
+        Condition::Expression(expr) => {
+            let get_type = expr.0.get_type(state);
+            if get_type != Type::Bool {
+                return Err(Rich::custom(
+                    condition.1,
+                    format!("Expected type of Bool, found {:?}", get_type),
+                ));
+            };
+            let (output, run_before) = transpile_expr((&expr.0, condition.1), state)?;
+            Ok((format!("[ {output} = 1 ]"), run_before))
+        }
         Condition::Operator(op, expr1, expr2) => {
             let mut output = String::from("[ ");
             let (new_output, mut run_before) = transpile_expr((&expr1.0, condition.1), state)?;

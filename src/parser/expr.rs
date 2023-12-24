@@ -76,6 +76,8 @@ pub fn expression<'src>(
                 expr.clone()
                     .map(|(expr, _)| expr)
                     .delimited_by(just('('), just(')')),
+                text::keyword("true").padded().to(Expr::Bool(true)),
+                text::keyword("false").padded().to(Expr::Bool(false)),
                 expr.clone()
                     .separated_by(just(','))
                     .allow_trailing()

@@ -14,6 +14,7 @@ pub fn transpile_macro<'src>(
         "raw_name" => raw_name(args, state),
         "into_str" => into_str(args, state),
         "format" => format(args, state),
+        "print" => print(args, state),
         m => Err(Rich::custom(args.1, format!("Unable to find macro {m}"))),
     }
 }
@@ -73,6 +74,14 @@ fn raw_name<'src>(
             format!("Expected string literal found {:?}", args.0[0].0),
         ))
     }
+}
+
+fn print<'src>(
+    args: Spanned<&'src Vec<Spanned<Expr<'src>>>>,
+    state: &mut State,
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    let (to_print, run_before) = format(args, state)?;
+    Ok((String::from("echo ") + &to_print, run_before))
 }
 
 fn format<'src>(

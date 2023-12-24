@@ -28,6 +28,7 @@ fn get_type<'src>() -> impl Parser<'src, &'src str, Type, ParseErr<'src>> + Clon
         ))
     })
     .padded()
+    .boxed()
 }
 
 fn type_assignment<'src>() -> impl Parser<'src, &'src str, Option<Type>, ParseErr<'src>> + Clone {

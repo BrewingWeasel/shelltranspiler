@@ -25,28 +25,30 @@ pub fn expression<'src>(
 
         let var = ident.map(Expr::Var);
 
-        let generic_call = ident.then(
-            expr.clone()
-                .separated_by(just(','))
-                .allow_trailing()
-                .collect::<Vec<_>>()
-                .map_with(|args, e| (args, e.span()))
-                .then(
-                    just('|')
-                        .padded()
-                        .ignore_then(
-                            ident
-                                .then_ignore(just('='))
-                                .then(expr.clone())
-                                .separated_by(just(','))
-                                .allow_trailing()
-                                .collect::<Vec<_>>(),
-                        )
-                        .or_not()
-                        .map_with(|kwargs, e| (kwargs.unwrap_or_default(), e.span())),
-                )
-                .delimited_by(just('('), just(')')),
-        );
+        let generic_call = ident
+            .then(
+                expr.clone()
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .map_with(|args, e| (args, e.span()))
+                    .then(
+                        just('|')
+                            .padded()
+                            .ignore_then(
+                                ident
+                                    .then_ignore(just('='))
+                                    .then(expr.clone())
+                                    .separated_by(just(','))
+                                    .allow_trailing()
+                                    .collect::<Vec<_>>(),
+                            )
+                            .or_not()
+                            .map_with(|kwargs, e| (kwargs.unwrap_or_default(), e.span())),
+                    )
+                    .delimited_by(just('('), just(')')),
+            )
+            .boxed();
 
         let macro_call = just('@')
             .ignore_then(ident)
@@ -84,7 +86,8 @@ pub fn expression<'src>(
                     .collect::<Vec<_>>()
                     .delimited_by(just('['), just(']'))
                     .map_with(|values, e| Expr::List((values, e.span())))
-                    .padded(),
+                    .padded()
+                    .boxed(),
                 ident
                     .then(expr.delimited_by(just('['), just(']')))
                     .map(|(ident, expr)| Expr::ListIndex(ident, Box::new(expr))),
@@ -132,6 +135,7 @@ pub fn expression<'src>(
                     }
                 },
             )
+            .boxed()
         })
     })
 }

@@ -48,6 +48,7 @@ fn if_statement<'src>(
             .map_with(|if_statement, e| (if_statement, e.span()))
     })
     .map(|(if_statement, span)| Statement::If((if_statement, span)))
+    .boxed()
 }
 
 pub fn parse_statement<'src>(
@@ -180,7 +181,8 @@ pub fn parse_statement<'src>(
             .map(|(((((id, type_vars), args), kwargs), return_type), body)| {
                 Statement::Function(id, type_vars, args, kwargs, return_type, body)
             })
-            .labelled("function");
+            .labelled("function")
+            .boxed();
 
         let public_statement = text::keyword("pub")
             .padded()
@@ -203,5 +205,6 @@ pub fn parse_statement<'src>(
         .then_ignore(comment.or_not())
         .then_ignore(just(';').ignored().or(text::newline()).or_not())
         .padded()
+        .boxed()
     })
 }

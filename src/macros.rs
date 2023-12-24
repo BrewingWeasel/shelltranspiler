@@ -1,6 +1,6 @@
 use chumsky::error::Rich;
 
-use crate::transpiler::transpile_expr;
+use crate::transpiler::{transpile_expr, transpile_repr};
 use crate::State;
 use crate::{parser::Spanned, Expr};
 
@@ -15,6 +15,7 @@ pub fn transpile_macro<'src>(
         "into_str" => into_str(args, state),
         "format" => format(args, state),
         "print" => print(args, state),
+        "stdout" => stdout(args, state),
         m => Err(Rich::custom(args.1, format!("Unable to find macro {m}"))),
     }
 }
@@ -47,6 +48,20 @@ fn into_str<'src>(
         ));
     }
     transpile_expr((&args.0[0].0, args.0[0].1), state)
+}
+
+fn stdout<'src>(
+    args: Spanned<&'src Vec<Spanned<Expr<'src>>>>,
+    state: &mut State,
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    if args.0.len() != 1 {
+        return Err(Rich::custom(
+            args.1,
+            format!("Expected 1 argument, found {}", args.0.len()),
+        ));
+    }
+    let (output, run_before) = transpile_repr((&args.0[0].0, args.0[0].1), state)?;
+    Ok((format!("$({output})"), run_before))
 }
 
 fn raw_name<'src>(

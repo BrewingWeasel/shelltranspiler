@@ -193,9 +193,12 @@ impl<'src> Expr<'src> {
             }
             Self::Macro(m, _) => match *m {
                 "eval" => Type::None,
+                "print" => Type::None,
+                "format" => Type::Str,
                 "raw_name" => Type::Str,
                 "into_str" => Type::Str,
-                _ => unreachable!(),
+                "stdout" => Type::Str,
+                _ => unimplemented!(),
             },
             Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),
         }

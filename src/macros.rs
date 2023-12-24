@@ -81,7 +81,7 @@ fn print<'src>(
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     let (to_print, run_before) = format(args, state)?;
-    Ok((String::from("echo ") + &to_print, run_before))
+    Ok((String::from("echo -e ") + &to_print, run_before))
 }
 
 fn format<'src>(

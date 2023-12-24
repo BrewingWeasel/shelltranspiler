@@ -198,6 +198,7 @@ impl<'src> Expr<'src> {
                 "raw_name" => Type::Str,
                 "into_str" => Type::Str,
                 "stdout" => Type::Str,
+                "is_successful_exit" => Type::Bool,
                 _ => unimplemented!(),
             },
             Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),
@@ -254,6 +255,7 @@ struct State<'src> {
     scopes: Vec<Scope<'src>>,
     list_num: usize,
     times_ran_for_loop: usize,
+    temp_vars_used: usize,
     modules: HashMap<&'src str, Box<State<'src>>>,
 }
 
@@ -264,6 +266,7 @@ impl<'src> State<'src> {
             scopes: vec![Scope::new("global", None)],
             list_num: 0,
             times_ran_for_loop: 0,
+            temp_vars_used: 0,
             modules: HashMap::new(),
         }
     }
@@ -411,6 +414,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                     scopes: vec![Scope::new("module", None)],
                     list_num: state.list_num,
                     times_ran_for_loop: state.times_ran_for_loop,
+                    temp_vars_used: state.temp_vars_used,
                     modules: HashMap::new(),
                 };
                 let generated = match transpile_from_ast(&mod_ast, &mut mini_state, true) {
@@ -422,6 +426,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                 };
                 state.list_num += mini_state.list_num;
                 state.times_ran_for_loop += mini_state.times_ran_for_loop;
+                state.temp_vars_used += mini_state.temp_vars_used;
                 output.push_str(&generated);
                 state.modules.insert(mod_name, Box::from(mini_state));
             }

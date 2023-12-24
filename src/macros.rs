@@ -16,8 +16,19 @@ pub fn transpile_macro<'src>(
         "format" => format(args, state),
         "print" => print(args, state),
         "stdout" => stdout(args, state),
+        "is_successful_exit" => is_successful_exit(args, state),
         m => Err(Rich::custom(args.1, format!("Unable to find macro {m}"))),
     }
+}
+
+fn check_valid_args<'src>(args: Spanned<&'src Vec<Spanned<Expr<'src>>>>, intended_arg_num: usize) -> Result<(), Rich<'src, char>> {
+    if args.0.len() != intended_arg_num {
+        return Err(Rich::custom(
+            args.1,
+            format!("Expected 1 argument, found {}", args.0.len()),
+        ));
+    }
+    Ok(())
 }
 
 fn eval<'src>(
@@ -41,12 +52,7 @@ fn into_str<'src>(
     args: Spanned<&'src Vec<Spanned<Expr<'src>>>>,
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
-    if args.0.len() != 1 {
-        return Err(Rich::custom(
-            args.1,
-            format!("Expected 1 argument, found {}", args.0.len()),
-        ));
-    }
+    check_valid_args(args, 1)?;
     transpile_expr((&args.0[0].0, args.0[0].1), state)
 }
 
@@ -54,14 +60,25 @@ fn stdout<'src>(
     args: Spanned<&'src Vec<Spanned<Expr<'src>>>>,
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
-    if args.0.len() != 1 {
-        return Err(Rich::custom(
-            args.1,
-            format!("Expected 1 argument, found {}", args.0.len()),
-        ));
-    }
+    check_valid_args(args, 1)?;
     let (output, run_before) = transpile_repr((&args.0[0].0, args.0[0].1), state)?;
     Ok((format!("$({output})"), run_before))
+}
+
+fn is_successful_exit<'src>(
+    args: Spanned<&'src Vec<Spanned<Expr<'src>>>>,
+    state: &mut State,
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    check_valid_args(args, 1)?;
+    let (output, run_before) = transpile_repr((&args.0[0].0, args.0[0].1), state)?;
+    let mut run_before = run_before.unwrap_or_default();
+    run_before.push_str(&output);
+    let var_name = format!("__tempv_{}", state.temp_vars_used);
+    run_before.push_str(&format!(" 
+if [ $? = 0 ]; then {}=1; else {}=0; fi
+", var_name, var_name));
+    state.temp_vars_used += 1;
+    Ok((format!("\"${}\"", var_name), Some(run_before)))
 }
 
 fn raw_name<'src>(

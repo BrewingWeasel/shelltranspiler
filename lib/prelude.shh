@@ -23,6 +23,7 @@ fun pop<v>(list: [%v], | index_to_pop: int = -1) -> %v {
     var next_index = index_to_shuffle + 1
     @eval("eval", @raw_name(list) + "_" + @into_str(index_to_shuffle) + "=$" + @raw_name(list) + "_" + @into_str(next_index))
     index_to_shuffle = next_index
+
   }
 
   # subtract one from length
@@ -31,7 +32,7 @@ fun pop<v>(list: [%v], | index_to_pop: int = -1) -> %v {
   return value
 }
 
-max(x: int, y: int) -> int {
+fun max(x: int, y: int) -> int {
   if x > y {
     return x
   } else {

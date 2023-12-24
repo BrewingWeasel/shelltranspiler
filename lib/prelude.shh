@@ -47,3 +47,8 @@ fun min(x: int, y: int) -> int {
     return y
   }
 }
+
+fun input(prompt: string) -> string {
+  @eval("read", "-p", prompt, "__readvar")
+  return @eval("$__readvar")
+}

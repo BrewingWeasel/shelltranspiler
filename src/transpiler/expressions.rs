@@ -328,6 +328,25 @@ pub fn transpile_repr<'a>(
             call_function(f, None, (&args.0, args.1), (&kwargs.0, kwargs.1), state)
                 .map(|v| (v, None))
         }
+        Expr::CallModule(module_name, func, args, kwargs) => {
+            let Some(module) = state.modules.get(module_name) else {
+                return Err(Rich::custom(expr.1, format!("Unable to find module {module_name}")))
+            };
+            if module.get_func(func).is_none() {
+                return Err(Rich::custom(
+                    expr.1,
+                    format!("Unable to find function {func}"),
+                ));
+            }
+            call_function(
+                func,
+                Some(module_name),
+                (&args.0, args.1),
+                (&kwargs.0, kwargs.1),
+                state,
+            )
+            .map(|v| (v, None))
+        }
         Expr::Pipe(first, second) => {
             let (mut output, mut run_before) = transpile_repr((&first.0, first.1), state)?;
             output.push_str(" | ");

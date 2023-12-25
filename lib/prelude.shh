@@ -4,7 +4,7 @@ fun len<v>(list: [%v]) -> int {
 
 fun push<v>(list: [%v], new_elem: %v) {
   var len = @raw_name(list) + "_len"
-  @eval("eval", @raw_name(list) + "_" + @into(len(list)) + "=" + @into(new_elem))
+  @eval("eval", @raw_name(list) + "_" + @unsafe_into(len(list)) + "=" + @unsafe_into(new_elem))
   @eval("eval", len + "=$((" + len + " + 1))")
 }
 
@@ -21,7 +21,7 @@ fun pop<v>(list: [%v], | index_to_pop: int = -1) -> %v {
   # move each part of list, starting at the index popped
   while index_to_shuffle < list_len {
     var next_index = index_to_shuffle + 1
-    @eval("eval", @raw_name(list) + "_" + @into(index_to_shuffle) + "=$" + @raw_name(list) + "_" + @into(next_index))
+    @eval("eval", @raw_name(list) + "_" + @unsafe_into(index_to_shuffle) + "=$" + @raw_name(list) + "_" + @unsafe_into(next_index))
     index_to_shuffle = next_index
 
   }

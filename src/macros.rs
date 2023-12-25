@@ -12,7 +12,7 @@ pub fn transpile_macro<'src>(
     match macro_name {
         "eval" => eval(args, state),
         "raw_name" => raw_name(args, state),
-        "into_str" => into_str(args, state),
+        "unsafe_into" => unsafe_into(args, state),
         "format" => format(args, state),
         "print" => print(args, state),
         "stdout" => stdout(args, state),
@@ -48,7 +48,7 @@ fn eval<'src>(
     Ok((contents, run_before.into()))
 }
 
-fn into_str<'src>(
+fn unsafe_into<'src>(
     args: Spanned<&'src Vec<Spanned<Expr<'src>>>>,
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {

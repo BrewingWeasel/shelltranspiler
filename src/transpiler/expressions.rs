@@ -170,7 +170,7 @@ fn run_operation<'a>(
 ) -> Result<(String, Option<String>), Rich<'a, char>> {
     let type1 = first.0.get_type(state);
     let type2 = second.0.get_type(state);
-    if type1 != type2 {
+    if !type1.matches(&type2) {
         return Err(Rich::custom(
             first.1.union(second.1),
             format!("Types being added do not match (found {type1} and {type2})"),
@@ -183,7 +183,7 @@ fn run_operation<'a>(
         run_before.push('\n');
         run_before.push_str(&run);
     }
-    if let Some(format) = operations.get(&type1) {
+    if let Some(format) = operations.get(&type1).or_else(|| operations.get(&type2)) {
         let output = format
             .replace("{1}", &first_expr)
             .replace("{2}", &second_expr);

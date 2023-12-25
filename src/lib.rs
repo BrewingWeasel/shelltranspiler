@@ -196,7 +196,7 @@ impl<'src> Expr<'src> {
                 "print" => Type::None,
                 "format" => Type::Str,
                 "raw_name" => Type::Str,
-                "into_str" => Type::Str,
+                "into" => Type::Any,
                 "stdout" => Type::Str,
                 "is_successful_exit" => Type::Bool,
                 _ => unimplemented!(),

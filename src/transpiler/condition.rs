@@ -1,4 +1,7 @@
-use crate::{parser::Spanned, Condition, State, Type};
+use crate::{
+    parser::Spanned, utils::add_option_to_str, Condition, ExpressionToMatch, MatchStatement, State,
+    Type,
+};
 use chumsky::prelude::Rich;
 
 use super::expressions::transpile_expr;
@@ -6,7 +9,7 @@ use super::expressions::transpile_expr;
 pub fn transpile_condition<'src>(
     condition: Spanned<&'src Condition>,
     state: &mut State,
-) -> Result<(String, Option<String>), Rich<'src, char>> {
+) -> Result<(String, Option<String>, Option<String>), Rich<'src, char>> {
     match condition.0 {
         Condition::Expression(expr) => {
             let get_type = expr.0.get_type(state);
@@ -17,8 +20,13 @@ pub fn transpile_condition<'src>(
                 ));
             };
             let (output, run_before) = transpile_expr((&expr.0, condition.1), state)?;
-            Ok((format!("[ {output} = 1 ]"), run_before))
+            Ok((format!("[ {output} = 1 ]"), run_before, None))
         }
+        Condition::IfLet(match_statement, expr) => transpile_match(
+            match_statement,
+            (&ExpressionToMatch::Expr(&expr.0), expr.1),
+            state,
+        ),
         Condition::Operator(op, expr1, expr2) => {
             let mut output = String::from("[ ");
             let (new_output, mut run_before) = transpile_expr((&expr1.0, condition.1), state)?;
@@ -39,51 +47,169 @@ pub fn transpile_condition<'src>(
 
             let (second_output, second_run_before) =
                 transpile_expr((&expr2.0, condition.1), state)?;
-            if let Some(run) = second_run_before {
-                run_before = Some(run_before.unwrap_or_default() + &run);
-            }
+            add_option_to_str(&mut run_before, &second_run_before);
 
             output.push_str(&second_output);
             output.push_str(" ]");
-            Ok((output, run_before))
+            Ok((output, run_before, None))
         }
         Condition::Not(cond) => {
             let mut output = String::from("! ");
-            let (new_output, run_before) = transpile_condition((cond, condition.1), state)?;
+            let (new_output, run_before, run_after) =
+                transpile_condition((cond, condition.1), state)?;
             output.push_str(&new_output);
-            Ok((output, run_before))
+            Ok((output, run_before, run_after))
         }
         Condition::InParens(cond) => {
             let mut output = String::from("(");
-            let (new_output, run_before) = transpile_condition((cond, condition.1), state)?;
+            let (new_output, run_before, set_vars) =
+                transpile_condition((cond, condition.1), state)?;
             output.push_str(&new_output);
             output.push(')');
-            Ok((output, run_before))
+            Ok((output, run_before, set_vars))
         }
         Condition::And(cond1, cond2) => {
-            let (mut output, mut run_before) = transpile_condition((cond1, condition.1), state)?;
+            let (mut output, mut run_before, mut set_vars) =
+                transpile_condition((cond1, condition.1), state)?;
             output.push_str(" && ");
 
-            let (second_output, second_run_before) =
+            let (second_output, second_run_before, second_set_vars) =
                 transpile_condition((cond2, condition.1), state)?;
-            if let Some(run) = second_run_before {
-                run_before = Some(run_before.unwrap_or_default() + &run);
-            }
             output.push_str(&second_output);
-            Ok((output, run_before))
+
+            add_option_to_str(&mut run_before, &second_run_before);
+            add_option_to_str(&mut set_vars, &second_set_vars);
+
+            Ok((output, run_before, set_vars))
         }
         Condition::Or(cond1, cond2) => {
-            let (mut output, mut run_before) = transpile_condition((cond1, condition.1), state)?;
+            let (mut output, mut run_before, mut set_vars) =
+                transpile_condition((cond1, condition.1), state)?;
             output.push_str(" || ");
-            let (second_output, second_run_before) =
+            let (second_output, second_run_before, second_set_vars) =
                 transpile_condition((cond2, condition.1), state)?;
-            if let Some(run) = second_run_before {
-                run_before = Some(run_before.unwrap_or_default() + &run);
-            }
+
             output.push_str(&second_output);
-            Ok((output, run_before))
+
+            add_option_to_str(&mut run_before, &second_run_before);
+            add_option_to_str(&mut set_vars, &second_set_vars);
+
+            Ok((output, run_before, set_vars))
         }
     }
+}
+
+fn transpile_expr_to_match<'src, 'a>(
+    expr: Spanned<&ExpressionToMatch<'src, 'a>>,
+    state: &mut State,
+) -> Result<(String, Option<String>), Rich<'src, char>> {
+    match expr.0 {
+        ExpressionToMatch::Expr(e) => transpile_expr((&e, expr.1), state),
+        ExpressionToMatch::EnumVal(enum_ident, _name, number) => {
+            let (output, new_run_before) = transpile_expr_to_match((&**enum_ident, expr.1), state)?;
+            Ok((format!("${output}_{number}"), new_run_before))
+        }
+    }
+}
+
+fn transpile_match<'src, 'a>(
+    match_statement: &'src MatchStatement<'src>,
+    expr: Spanned<&ExpressionToMatch<'src, 'a>>,
+    state: &mut State,
+) -> Result<(String, Option<String>, Option<String>), Rich<'src, char>> {
+    let mut run_before = None;
+    let mut checking = Vec::new();
+    let mut assignments = None;
+
+    let (output, new_run_before) = transpile_expr_to_match(expr, state)?;
+
+    match match_statement {
+        MatchStatement::Enum(ident, opt_ident, matching) => {
+            let get_type = expr.0.get_type(state);
+            if let Type::Enum(enum_ident) = get_type {
+                if &enum_ident != *ident {
+                    return Err(Rich::custom(
+                        expr.1,
+                        format!(
+                            "Expected to find Enum of type {ident}, but found Enum {enum_ident}"
+                        ),
+                    ));
+                }
+
+                let enum_type = state.enums.get(*ident).expect("already checked enum");
+                if let Some(types) = enum_type.opts.get(*opt_ident) {
+                    if matching.len() != types.len() {
+                        return Err(Rich::custom(
+                            expr.1,
+                            format!(
+                                "Found {} arguments, expected {}",
+                                matching.len(),
+                                types.len()
+                            ),
+                        ));
+                    }
+                    for (matcher, opt_type) in matching.iter().zip(types.iter()) {
+                        if let MatchStatement::LiteralValue(testing_expr) = matcher {
+                            if !testing_expr.get_type(state).matches(opt_type) {
+                                return Err(Rich::custom(
+                                    expr.1,
+                                    format!("Expecting type {opt_type}"),
+                                ));
+                            }
+                        }
+                    }
+                    for i in 0..types.len() {
+                        let (conditions, new_run_before, new_assignments) = transpile_match(
+                            match_statement,
+                            (
+                                &ExpressionToMatch::EnumVal(
+                                    Box::new(expr.0),
+                                    "", // TODO: real value
+                                    i,
+                                ),
+                                expr.1,
+                            ),
+                            state,
+                        )?;
+                        checking.push(conditions);
+                        add_option_to_str(&mut run_before, &new_run_before);
+                        add_option_to_str(&mut assignments, &new_assignments);
+                    }
+
+                    add_option_to_str(&mut run_before, &new_run_before);
+                    checking.push(format!("[ {}_v = {} ]", output, opt_ident))
+                } else {
+                    return Err(Rich::custom(
+                        expr.1,
+                        format!("Unable to find case {opt_ident} of {ident}"),
+                    ));
+                }
+            } else {
+                return Err(Rich::custom(
+                    expr.1,
+                    format!("Expected to find Enum of type {ident}, but found {get_type}"),
+                ));
+            }
+        }
+        MatchStatement::Assignment(var) => {
+            add_option_to_str(&mut run_before, &new_run_before);
+            assignments = Some(format!("{var}={output}"));
+        }
+        MatchStatement::LiteralValue(val) => {
+            let mut new_output = String::from("[ ");
+            new_output.push_str(&output);
+
+            new_output.push_str(" = ");
+
+            let (second_output, second_run_before) = transpile_expr((&val, expr.1), state)?;
+            add_option_to_str(&mut run_before, &second_run_before);
+
+            new_output.push_str(&second_output);
+            new_output.push_str(" ]");
+            checking.push(new_output);
+        }
+    }
+    Ok((checking.join(" && "), run_before, assignments))
 }
 
 #[cfg(test)]
@@ -111,7 +237,7 @@ mod test {
                 ),
                 &mut state,
             ),
-            Ok((String::from("[ 'hello' = 'HELLO' ]"), None))
+            Ok((String::from("[ 'hello' = 'HELLO' ]"), None, None))
         );
     }
 
@@ -133,7 +259,7 @@ mod test {
                 ),
                 &mut state,
             ),
-            Ok((String::from("! false "), None))
+            Ok((String::from("! false "), None, None))
         );
     }
 
@@ -165,7 +291,7 @@ mod test {
                 ),
                 &mut state,
             ),
-            Ok((String::from("! (false  && true )"), None))
+            Ok((String::from("! (false  && true )"), None, None))
         );
     }
 
@@ -207,7 +333,7 @@ mod test {
                 ),
                 &mut state,
             ),
-            Ok((String::from("! (false  && true ) || false "), None))
+            Ok((String::from("! (false  && true ) || false "), None, None))
         );
     }
 }

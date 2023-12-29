@@ -1,4 +1,5 @@
-use crate::Condition;
+use crate::{Condition, MatchStatement};
+use chumsky::text::ascii::{ident, keyword};
 use chumsky::{prelude::*, Parser};
 
 use super::expr::expression;
@@ -22,8 +23,18 @@ pub fn conditional<'src>() -> impl Parser<'src, &'src str, Condition<'src>, Pars
                 .map(move |(val1, val2)| Condition::Operator(op, val1, val2))
         };
 
+        let if_let = keyword("let")
+            .padded()
+            .ignore_then(match_creation())
+            .padded()
+            .then_ignore(just('='))
+            .padded()
+            .then(expr.clone())
+            .map(|(m, e)| Condition::IfLet(m, e));
+
         let condition = choice((
             not,
+            if_let,
             operator("=="),
             operator("!="),
             operator(">="),
@@ -55,6 +66,28 @@ pub fn conditional<'src>() -> impl Parser<'src, &'src str, Condition<'src>, Pars
                 }
             })
             .labelled("condition")
+    })
+}
+
+pub fn match_creation<'src>(
+) -> impl Parser<'src, &'src str, MatchStatement<'src>, ParseErr<'src>> + Clone {
+    recursive(|creation| {
+        choice((
+            ident()
+                .then_ignore(just("::"))
+                .then(ident())
+                .then(
+                    creation
+                        .separated_by(just(','))
+                        .allow_trailing()
+                        .collect::<Vec<_>>()
+                        .padded()
+                        .delimited_by(just('('), just(')')),
+                )
+                .map(|((ident, opt), vals)| MatchStatement::Enum(dbg!(ident), dbg!(opt), vals)),
+            ident().map(MatchStatement::Assignment),
+            expression().map(|(v, _span)| MatchStatement::LiteralValue(v)),
+        ))
     })
 }
 
@@ -195,6 +228,9 @@ mod tests {
                 }
             }
         }
-        assert!(!(!got_to_correct_condition.0 || !got_to_correct_condition.1), "Did not reach all expected conditions");
+        assert!(
+            !(!got_to_correct_condition.0 || !got_to_correct_condition.1),
+            "Did not reach all expected conditions"
+        );
     }
 }

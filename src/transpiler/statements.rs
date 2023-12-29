@@ -188,15 +188,32 @@ done
         }
         Statement::While(condition, body) => {
             let mut output = String::from("while ");
-            let (new_output, run_before) = transpile_condition((&condition.0, condition.1), state)?;
+            let (new_output, run_before, set_vars) =
+                transpile_condition((&condition.0, condition.1), state)?;
             output.push_str(&new_output);
             output.push_str("; do\n");
+            if let Some(assigns) = set_vars {
+                output.push_str(&assigns);
+            }
             output.push_str(&transpile_from_ast(&body.0, state, false)?);
             output.push_str("\ndone");
             Ok((output, run_before))
         }
         Statement::If(if_statement) => transpile_if((&if_statement.0, if_statement.1), state),
         Statement::Empty | Statement::Import(_) => Ok((String::new(), None)),
+        Statement::EnumCreation(ident, options) => {
+            state.enums.insert(
+                ident,
+                crate::Enum {
+                    opts: options
+                        .iter()
+                        .map(|(opt_ident, opt_types)| (*opt_ident, opt_types.iter().collect()))
+                        .collect(),
+                    times_called: 0,
+                },
+            );
+            Ok((String::new(), None))
+        }
         Statement::Pub(_) => unreachable!(),
     }
 }
@@ -207,9 +224,13 @@ pub fn transpile_if<'state, 'src: 'state>(
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     let mut output = String::from("if ");
     let condition = &if_statement.0.cond;
-    let (new_output, run_before) = transpile_condition((&condition.0, condition.1), state)?;
+    let (new_output, run_before, assignments) =
+        transpile_condition((&condition.0, condition.1), state)?;
     output.push_str(&new_output);
     output.push_str("; then\n");
+    if let Some(assigns) = assignments {
+        output.push_str(&assigns);
+    }
     output.push_str(&transpile_from_ast(
         &if_statement.0.statements,
         state,

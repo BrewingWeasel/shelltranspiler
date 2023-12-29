@@ -94,6 +94,28 @@ pub fn parse_statement<'src>(
 
         let if_statement = if_statement(statement.clone());
 
+        let enum_creation = text::keyword("enum")
+            .padded()
+            .ignore_then(ident)
+            .padded()
+            .then(
+                ident
+                    .then(
+                        get_type()
+                            .separated_by(just(','))
+                            .allow_trailing()
+                            .collect::<Vec<_>>()
+                            .delimited_by(just('('), just(')')),
+                    )
+                    .padded()
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .padded()
+                    .delimited_by(just('{'), just('}')),
+            )
+            .map(|(ident, opts)| Statement::EnumCreation(ident, opts));
+
         let for_loop = text::keyword("for")
             .padded()
             .ignore_then(ident)
@@ -199,6 +221,7 @@ pub fn parse_statement<'src>(
             for_loop,
             while_loop,
             import_statement,
+            enum_creation,
             expr.map(Statement::Expression),
             comment.to(Statement::Empty),
         ))

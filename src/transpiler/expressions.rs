@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::{get_generic_by_path, macros::transpile_macro, parser::Spanned, Expr, State, Type};
 use chumsky::{
-    container::Seq,
     prelude::Rich,
     span::{SimpleSpan, Span},
 };
@@ -22,6 +21,49 @@ pub fn transpile_expr<'src>(
             },
             None,
         )),
+        Expr::Enum(ident, opt_ident, elements) => {
+            let mut run_before = String::new();
+            if let Some(real_enum) = state.enums.get(ident) {
+                let variable_template = format!("{ident}_vals_{}", real_enum.times_called);
+                if let Some(actual_types) = real_enum.opts.get(opt_ident) {
+                    if actual_types.len() != elements.0.len() {
+                        todo!()
+                    }
+
+                    for (goal_type, elem) in actual_types.iter().zip(elements.0.iter()) {
+                        let attempted_type = &elem.0.get_type(state);
+                        if !attempted_type.matches(goal_type) {
+                            return Err(Rich::custom(
+                                expr.1,
+                                format!("Expected type {attempted_type} of enum {goal_type}"),
+                            ));
+                        }
+                    }
+
+                    for (i, elem) in elements.0.iter().enumerate() {
+                        let (expr, run_before_expr) = transpile_expr((&elem.0, elem.1), state)?;
+                        if let Some(before) = run_before_expr {
+                            run_before.push_str(&before);
+                            run_before.push('\n');
+                        }
+                        run_before.push_str(&format!("{variable_template}_{i}={}\n", expr));
+                    }
+                    state.call_enum(ident);
+                } else {
+                    return Err(Rich::custom(
+                        expr.1,
+                        format!("Unable to find option {opt_ident} of enum {ident}"),
+                    ));
+                }
+                run_before.push_str(&format!("{variable_template}_v={opt_ident}\n"));
+                Ok((
+                    variable_template,
+                    Some(run_before).filter(|v| !v.is_empty()),
+                ))
+            } else {
+                Err(Rich::custom(expr.1, format!("Unable to find enum {ident}")))
+            }
+        }
         Expr::List(elements) => {
             let list_pointer = state.new_list_pointer();
             let (mut output, mut add_before) = (String::new(), String::new());

@@ -15,6 +15,14 @@ pub fn expression<'src>(
             })
             .padded();
 
+        let arguments = expr
+            .clone()
+            .separated_by(just(','))
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .map_with(|args, e| (args, e.span()))
+            .boxed();
+
         let strvalue = any()
             .filter(|c: &char| *c != '"')
             .repeated()
@@ -23,15 +31,17 @@ pub fn expression<'src>(
             .delimited_by(just('"'), just('"'))
             .padded();
 
+        let enum_expr = ident
+            .then_ignore(just("::"))
+            .then(ident)
+            .then(arguments.clone().delimited_by(just('('), just(')')))
+            .map(|((enum_name, enum_opt), exprs)| Expr::Enum(enum_name, enum_opt, exprs));
+
         let var = ident.map(Expr::Var);
 
         let generic_call = ident
             .then(
-                expr.clone()
-                    .separated_by(just(','))
-                    .allow_trailing()
-                    .collect::<Vec<_>>()
-                    .map_with(|args, e| (args, e.span()))
+                arguments
                     .then(
                         just('|')
                             .padded()
@@ -94,6 +104,7 @@ pub fn expression<'src>(
                 strvalue,
                 macro_call,
                 call_from_module,
+                enum_expr,
                 call,
                 var,
             ))

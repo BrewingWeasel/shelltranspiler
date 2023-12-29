@@ -8,6 +8,7 @@ use transpiler::transpile_from_ast;
 mod macros;
 mod parser;
 mod transpiler;
+mod utils;
 
 #[derive(Debug, Clone)]
 struct Function<'src> {
@@ -23,6 +24,12 @@ struct Kwarg<'src> {
     ident: &'src str,
     kwarg_type: Option<Type>,
     default: Spanned<Expr<'src>>,
+}
+
+#[derive(Debug, Clone)]
+struct Enum<'src> {
+    opts: HashMap<&'src str, Vec<&'src Type>>,
+    times_called: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +54,7 @@ enum Statement<'src> {
         Spanned<Condition<'src>>,
         Spanned<Vec<Spanned<Statement<'src>>>>,
     ),
+    EnumCreation(&'src str, Vec<(&'src str, Vec<Type>)>),
     If(Spanned<IfStatement<'src>>),
     Return(Spanned<Expr<'src>>),
     Import(Spanned<String>),
@@ -62,6 +70,7 @@ enum Type {
     Any,
     None,
     Generic(String),
+    Enum(String),
     List(Box<Type>),
 }
 
@@ -74,6 +83,7 @@ impl Display for Type {
             Type::Any => write!(f, "\x1b[35mundefined\x1b[39m"),
             Type::None => write!(f, "\x1b[35mNone\x1b[39m"),
             Type::Generic(v) => write!(f, "\x1b[35mGeneric variable {}\x1b[39m", v),
+            Type::Enum(v) => write!(f, "\x1b[35mEnum {}\x1b[39m", v),
             Type::List(v) => write!(f, "\x1b[35m[{}]\x1b[39m", v),
         }
     }
@@ -114,6 +124,13 @@ struct IfStatement<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum MatchStatement<'src> {
+    LiteralValue(Expr<'src>),
+    Assignment(&'src str),
+    Enum(&'src str, &'src str, Vec<MatchStatement<'src>>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Condition<'src> {
     Expression(Spanned<Expr<'src>>),
     Operator(&'src str, Spanned<Expr<'src>>, Spanned<Expr<'src>>),
@@ -121,6 +138,7 @@ enum Condition<'src> {
     InParens(Box<Condition<'src>>),
     And(Box<Condition<'src>>, Box<Condition<'src>>),
     Or(Box<Condition<'src>>, Box<Condition<'src>>),
+    IfLet(MatchStatement<'src>, Spanned<Expr<'src>>),
 }
 
 #[derive(Debug, Clone)]
@@ -129,11 +147,40 @@ enum ContinueIfStatement<'src> {
     Else(Vec<Spanned<Statement<'src>>>),
 }
 
+enum ExpressionToMatch<'src, 'a> {
+    Expr(&'src Expr<'src>),
+    EnumVal(Box<&'a ExpressionToMatch<'src, 'a>>, &'src str, usize),
+}
+
+impl<'src, 'a> ExpressionToMatch<'src, 'a> {
+    fn get_type(&self, state: &mut State) -> Type {
+        match self {
+            Self::Expr(e) => e.get_type(state),
+            Self::EnumVal(expr, opt, n) => {
+                if let Type::Enum(e) = expr.get_type(state) {
+                    Type::Any // TODO: real type
+                              // state
+                              //     .enums
+                              //     .get(e.as_str())
+                              //     .expect("Enum should exist")
+                              //     .opts
+                              //     .get(opt)
+                              //     .expect("Option should have already been checked")[*n]
+                              //     .to_owned()
+                } else {
+                    unreachable!()
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Expr<'src> {
     Num(i64), // TODO: float
     Str(String),
     Bool(bool),
+    Enum(&'src str, &'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
     List(Spanned<Vec<Spanned<Expr<'src>>>>),
     ListIndex(&'src str, Box<Spanned<Expr<'src>>>),
     Var(&'src str),
@@ -183,6 +230,7 @@ impl<'src> Expr<'src> {
                 }
                 Type::Any
             }
+            Self::Enum(e, _, _) => Type::Enum(e.to_string()),
             Self::CallModule(module, func, (args, _), _) => {
                 if let Some(fun) = state.modules.get(module).and_then(|s| s.get_func(func)) {
                     if let Some(value) = get_fun_return_type(fun, args, state) {
@@ -196,10 +244,13 @@ impl<'src> Expr<'src> {
                 "print" => Type::None,
                 "format" => Type::Str,
                 "raw_name" => Type::Str,
-                "into" => Type::Any,
+                "unsafe_into" => Type::Any,
                 "stdout" => Type::Str,
                 "is_successful_exit" => Type::Bool,
-                _ => unimplemented!(),
+                v => {
+                    eprintln!("{v}");
+                    unimplemented!()
+                }
             },
             Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),
         }
@@ -256,6 +307,7 @@ struct State<'src> {
     list_num: usize,
     times_ran_for_loop: usize,
     temp_vars_used: usize,
+    enums: HashMap<&'src str, Enum<'src>>,
     modules: HashMap<&'src str, Box<State<'src>>>,
 }
 
@@ -267,6 +319,7 @@ impl<'src> State<'src> {
             list_num: 0,
             times_ran_for_loop: 0,
             temp_vars_used: 0,
+            enums: HashMap::new(),
             modules: HashMap::new(),
         }
     }
@@ -319,6 +372,13 @@ impl<'src> State<'src> {
     fn new_for_loop_index(&mut self) -> String {
         self.times_ran_for_loop += 1;
         format!("__index_{}", self.times_ran_for_loop)
+    }
+
+    fn call_enum(&mut self, ident: &str) {
+        self.enums
+            .get_mut(ident)
+            .expect("Already ensured that enum exists")
+            .times_called += 1;
     }
 }
 
@@ -415,6 +475,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                     list_num: state.list_num,
                     times_ran_for_loop: state.times_ran_for_loop,
                     temp_vars_used: state.temp_vars_used,
+                    enums: HashMap::new(),
                     modules: HashMap::new(),
                 };
                 let generated = match transpile_from_ast(&mod_ast, &mut mini_state, true) {

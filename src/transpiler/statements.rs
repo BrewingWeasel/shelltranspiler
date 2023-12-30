@@ -192,8 +192,14 @@ done
                 transpile_condition((&condition.0, condition.1), state)?;
             output.push_str(&new_output);
             output.push_str("; do\n");
-            if let Some(assigns) = set_vars {
-                output.push_str(&assigns);
+            for (var, val, ty) in set_vars {
+                output.push_str(&format!("{var}={val}\n"));
+                state
+                    .scopes
+                    .last_mut()
+                    .expect("at least base scope")
+                    .vars
+                    .insert(var.clone(), (var, ty));
             }
             output.push_str(&transpile_from_ast(&body.0, state, false)?);
             output.push_str("\ndone");
@@ -228,8 +234,14 @@ pub fn transpile_if<'state, 'src: 'state>(
         transpile_condition((&condition.0, condition.1), state)?;
     output.push_str(&new_output);
     output.push_str("; then\n");
-    if let Some(assigns) = assignments {
-        output.push_str(&assigns);
+    for (var, val, ty) in assignments {
+        output.push_str(&format!("{var}={val}\n"));
+        state
+            .scopes
+            .last_mut()
+            .expect("at least base scope")
+            .vars
+            .insert(var.clone(), (var, ty));
     }
     output.push_str(&transpile_from_ast(
         &if_statement.0.statements,

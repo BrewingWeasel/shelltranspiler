@@ -9,7 +9,7 @@ use super::expressions::transpile_expr;
 pub fn transpile_condition<'src>(
     condition: Spanned<&'src Condition>,
     state: &mut State,
-) -> Result<(String, Option<String>, Option<String>), Rich<'src, char>> {
+) -> Result<(String, Option<String>, Vec<(String, String, Type)>), Rich<'src, char>> {
     match condition.0 {
         Condition::Expression(expr) => {
             let get_type = expr.0.get_type(state);
@@ -20,7 +20,7 @@ pub fn transpile_condition<'src>(
                 ));
             };
             let (output, run_before) = transpile_expr((&expr.0, condition.1), state)?;
-            Ok((format!("[ {output} = 1 ]"), run_before, None))
+            Ok((format!("[ {output} = 1 ]"), run_before, Vec::new()))
         }
         Condition::IfLet(match_statement, expr) => transpile_match(
             match_statement,
@@ -51,7 +51,7 @@ pub fn transpile_condition<'src>(
 
             output.push_str(&second_output);
             output.push_str(" ]");
-            Ok((output, run_before, None))
+            Ok((output, run_before, Vec::new()))
         }
         Condition::Not(cond) => {
             let mut output = String::from("! ");
@@ -73,12 +73,12 @@ pub fn transpile_condition<'src>(
                 transpile_condition((cond1, condition.1), state)?;
             output.push_str(" && ");
 
-            let (second_output, second_run_before, second_set_vars) =
+            let (second_output, second_run_before, mut second_set_vars) =
                 transpile_condition((cond2, condition.1), state)?;
             output.push_str(&second_output);
 
             add_option_to_str(&mut run_before, &second_run_before);
-            add_option_to_str(&mut set_vars, &second_set_vars);
+            set_vars.append(&mut second_set_vars);
 
             Ok((output, run_before, set_vars))
         }
@@ -86,13 +86,13 @@ pub fn transpile_condition<'src>(
             let (mut output, mut run_before, mut set_vars) =
                 transpile_condition((cond1, condition.1), state)?;
             output.push_str(" || ");
-            let (second_output, second_run_before, second_set_vars) =
+            let (second_output, second_run_before, mut second_set_vars) =
                 transpile_condition((cond2, condition.1), state)?;
 
             output.push_str(&second_output);
 
             add_option_to_str(&mut run_before, &second_run_before);
-            add_option_to_str(&mut set_vars, &second_set_vars);
+            set_vars.append(&mut second_set_vars);
 
             Ok((output, run_before, set_vars))
         }
@@ -116,10 +116,10 @@ fn transpile_match<'src, 'a>(
     match_statement: &'src MatchStatement<'src>,
     expr: Spanned<&ExpressionToMatch<'src, 'a>>,
     state: &mut State,
-) -> Result<(String, Option<String>, Option<String>), Rich<'src, char>> {
+) -> Result<(String, Option<String>, Vec<(String, String, Type)>), Rich<'src, char>> {
     let mut run_before = None;
     let mut checking = Vec::new();
-    let mut assignments = None;
+    let mut assignments = Vec::new();
 
     let (output, new_run_before) = transpile_expr_to_match(expr, state)?;
 
@@ -159,7 +159,7 @@ fn transpile_match<'src, 'a>(
                         }
                     }
                     for (i, matcher) in matching.iter().enumerate() {
-                        let (conditions, new_run_before, new_assignments) = transpile_match(
+                        let (conditions, new_run_before, mut new_assignments) = transpile_match(
                             matcher,
                             (
                                 &ExpressionToMatch::EnumVal(Box::new(expr.0), opt_ident, i),
@@ -169,7 +169,7 @@ fn transpile_match<'src, 'a>(
                         )?;
                         checking.push(conditions);
                         add_option_to_str(&mut run_before, &new_run_before);
-                        add_option_to_str(&mut assignments, &new_assignments);
+                        assignments.append(&mut new_assignments);
                     }
 
                     add_option_to_str(&mut run_before, &new_run_before);
@@ -190,7 +190,7 @@ fn transpile_match<'src, 'a>(
         }
         MatchStatement::Assignment(var) => {
             add_option_to_str(&mut run_before, &new_run_before);
-            assignments = Some(format!("{var}={output}"));
+            assignments = vec![(var.to_string(), output, expr.0.get_type(state))];
         }
         MatchStatement::LiteralValue(val) => {
             let (second_output, second_run_before) = transpile_expr((&val, expr.1), state)?;
@@ -232,7 +232,7 @@ mod test {
                 ),
                 &mut state,
             ),
-            Ok((String::from("[ 'hello' = 'HELLO' ]"), None, None))
+            Ok((String::from("[ 'hello' = 'HELLO' ]"), None, Vec::new()))
         );
     }
 
@@ -254,7 +254,7 @@ mod test {
                 ),
                 &mut state,
             ),
-            Ok((String::from("! false "), None, None))
+            Ok((String::from("! false "), None, Vec::new()))
         );
     }
 
@@ -286,7 +286,7 @@ mod test {
                 ),
                 &mut state,
             ),
-            Ok((String::from("! (false  && true )"), None, None))
+            Ok((String::from("! (false  && true )"), None, Vec::new()))
         );
     }
 
@@ -328,7 +328,11 @@ mod test {
                 ),
                 &mut state,
             ),
-            Ok((String::from("! (false  && true ) || false "), None, None))
+            Ok((
+                String::from("! (false  && true ) || false "),
+                None,
+                Vec::new()
+            ))
         );
     }
 }

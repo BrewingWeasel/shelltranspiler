@@ -112,6 +112,7 @@ impl Type {
     }
 }
 
+#[derive(Debug)]
 enum PathToValue {
     List,
 }
@@ -264,7 +265,7 @@ fn get_fun_return_type(
 ) -> Option<Type> {
     if let Some(return_v) = &fun.return_value {
         if let Type::Generic(generic_v) = return_v {
-            args.iter().zip(fun.args.iter()).find_map(
+            return args.iter().zip(fun.args.iter()).find_map(
                 |((attempted_arg, _), (_, arg_type))| {
                     if let Some((real_generic_v, path_to_generic)) =
                         arg_type.as_ref().and_then(|v| v.get_generic_var())

@@ -193,17 +193,10 @@ fn transpile_match<'src, 'a>(
             assignments = Some(format!("{var}={output}"));
         }
         MatchStatement::LiteralValue(val) => {
-            let mut new_output = String::from("[ ");
-            new_output.push_str(&output);
-
-            new_output.push_str(" = ");
-
             let (second_output, second_run_before) = transpile_expr((&val, expr.1), state)?;
             add_option_to_str(&mut run_before, &second_run_before);
 
-            new_output.push_str(&second_output);
-            new_output.push_str(" ]");
-            checking.push(new_output);
+            checking.push(format!("eval \"[ {} = {} ]\"", output, second_output))
         }
     }
     let final_checking = if checking.is_empty() {

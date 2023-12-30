@@ -77,14 +77,14 @@ enum Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Str => write!(f, "\x1b[35mstring\x1b[39m"),
-            Type::Num => write!(f, "\x1b[35mint\x1b[39m"),
-            Type::Bool => write!(f, "\x1b[35mbool\x1b[39m"),
-            Type::Any => write!(f, "\x1b[35mundefined\x1b[39m"),
-            Type::None => write!(f, "\x1b[35mNone\x1b[39m"),
-            Type::Generic(v) => write!(f, "\x1b[35mGeneric variable {}\x1b[39m", v),
-            Type::Enum(v) => write!(f, "\x1b[35mEnum {}\x1b[39m", v),
-            Type::List(v) => write!(f, "\x1b[35m[{}]\x1b[39m", v),
+            Self::Str => write!(f, "\x1b[35mstring\x1b[39m"),
+            Self::Num => write!(f, "\x1b[35mint\x1b[39m"),
+            Self::Bool => write!(f, "\x1b[35mbool\x1b[39m"),
+            Self::Any => write!(f, "\x1b[35mundefined\x1b[39m"),
+            Self::None => write!(f, "\x1b[35mNone\x1b[39m"),
+            Self::Generic(v) => write!(f, "\x1b[35mGeneric variable {v}\x1b[39m"),
+            Self::Enum(v) => write!(f, "\x1b[35mEnum {v}\x1b[39m"),
+            Self::List(v) => write!(f, "\x1b[35m[{v}]\x1b[39m"),
         }
     }
 }
@@ -230,7 +230,7 @@ impl<'src> Expr<'src> {
                 }
                 Type::Any
             }
-            Self::Enum(e, _, _) => Type::Enum(e.to_string()),
+            Self::Enum(e, _, _) => Type::Enum((*e).to_string()),
             Self::CallModule(module, func, (args, _), _) => {
                 if let Some(fun) = state.modules.get(module).and_then(|s| s.get_func(func)) {
                     if let Some(value) = get_fun_return_type(fun, args, state) {
@@ -264,7 +264,7 @@ fn get_fun_return_type(
 ) -> Option<Type> {
     if let Some(return_v) = &fun.return_value {
         if let Type::Generic(generic_v) = return_v {
-            return args.iter().zip(fun.args.iter()).find_map(
+            args.iter().zip(fun.args.iter()).find_map(
                 |((attempted_arg, _), (_, arg_type))| {
                     if let Some((real_generic_v, path_to_generic)) =
                         arg_type.as_ref().and_then(|v| v.get_generic_var())
@@ -478,7 +478,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                     enums: HashMap::new(),
                     modules: HashMap::new(),
                 };
-                let generated = match transpile_from_ast(&mod_ast, &mut mini_state, true) {
+                let generated = match transpile_from_ast(mod_ast, &mut mini_state, true) {
                     Ok(main_output) => main_output,
                     Err(err) => {
                         show_err(&err, filename.to_string_lossy().to_string(), &src);

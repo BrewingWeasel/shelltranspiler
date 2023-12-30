@@ -46,7 +46,7 @@ pub fn transpile_expr<'src>(
                             run_before.push_str(&before);
                             run_before.push('\n');
                         }
-                        run_before.push_str(&format!("{variable_template}_{i}={}\n", expr));
+                        run_before.push_str(&format!("{variable_template}_{i}={expr}\n"));
                     }
                     state.call_enum(ident);
                 } else {

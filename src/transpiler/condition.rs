@@ -16,7 +16,7 @@ pub fn transpile_condition<'src>(
             if get_type != Type::Bool {
                 return Err(Rich::custom(
                     condition.1,
-                    format!("Expected type of Bool, found {:?}", get_type),
+                    format!("Expected type of Bool, found {get_type:?}"),
                 ));
             };
             let (output, run_before) = transpile_expr((&expr.0, condition.1), state)?;
@@ -99,8 +99,8 @@ pub fn transpile_condition<'src>(
     }
 }
 
-fn transpile_expr_to_match<'src, 'a>(
-    expr: Spanned<&ExpressionToMatch<'src, 'a>>,
+fn transpile_expr_to_match<'src>(
+    expr: Spanned<&ExpressionToMatch<'src, '_>>,
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     match expr.0 {
@@ -112,9 +112,9 @@ fn transpile_expr_to_match<'src, 'a>(
     }
 }
 
-fn transpile_match<'src, 'a>(
+fn transpile_match<'src>(
     match_statement: &'src MatchStatement<'src>,
-    expr: Spanned<&ExpressionToMatch<'src, 'a>>,
+    expr: Spanned<&ExpressionToMatch<'src, '_>>,
     state: &mut State,
 ) -> Result<(String, Option<String>, Vec<(String, String, Type)>), Rich<'src, char>> {
     let mut run_before = None;
@@ -127,7 +127,7 @@ fn transpile_match<'src, 'a>(
         MatchStatement::Enum(ident, opt_ident, matching) => {
             let get_type = expr.0.get_type(state);
             if let Type::Enum(enum_ident) = get_type {
-                if &enum_ident != *ident {
+                if enum_ident != *ident {
                     return Err(Rich::custom(
                         expr.1,
                         format!(
@@ -173,7 +173,7 @@ fn transpile_match<'src, 'a>(
                     }
 
                     add_option_to_str(&mut run_before, &new_run_before);
-                    checking.push(format!("eval \"[ ${}_v = {} ]\"", output, opt_ident))
+                    checking.push(format!("eval \"[ ${output}_v = {opt_ident} ]\""));
                 } else {
                     return Err(Rich::custom(
                         expr.1,
@@ -181,7 +181,7 @@ fn transpile_match<'src, 'a>(
                     ));
                 }
             } else {
-                println!("{:?} {:?} {:?}", matching, match_statement, expr);
+                println!("{matching:?} {match_statement:?} {expr:?}");
                 return Err(Rich::custom(
                     expr.1,
                     format!("Expected to find Enum of type {ident}, but found {get_type}"),
@@ -190,13 +190,13 @@ fn transpile_match<'src, 'a>(
         }
         MatchStatement::Assignment(var) => {
             add_option_to_str(&mut run_before, &new_run_before);
-            assignments = vec![(var.to_string(), output, expr.0.get_type(state))];
+            assignments = vec![((*var).to_string(), output, expr.0.get_type(state))];
         }
         MatchStatement::LiteralValue(val) => {
             let (second_output, second_run_before) = transpile_expr((&val, expr.1), state)?;
             add_option_to_str(&mut run_before, &second_run_before);
 
-            checking.push(format!("eval \"[ {} = {} ]\"", output, second_output))
+            checking.push(format!("eval \"[ {output} = {second_output} ]\""));
         }
     }
     let final_checking = if checking.is_empty() {

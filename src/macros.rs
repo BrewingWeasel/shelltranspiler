@@ -75,10 +75,10 @@ fn is_successful_exit<'src>(
     run_before.push_str(&output);
     let var_name = format!("__tempv_{}", state.temp_vars_used);
     run_before.push_str(&format!(" 
-if [ $? = 0 ]; then {}=1; else {}=0; fi
-", var_name, var_name));
+if [ $? = 0 ]; then {var_name}=1; else {var_name}=0; fi
+"));
     state.temp_vars_used += 1;
-    Ok((format!("\"${}\"", var_name), Some(run_before)))
+    Ok((format!("\"${var_name}\""), Some(run_before)))
 }
 
 fn raw_name<'src>(
@@ -92,12 +92,12 @@ fn raw_name<'src>(
         ));
     }
     if let (Expr::Var(variable), span) = &args.0[0] {
-        if let Some((sh_variable_name, _type)) = state.get_var(&variable) {
+        if let Some((sh_variable_name, _type)) = state.get_var(variable) {
             Ok((format!("\"${sh_variable_name}\""), None))
         } else {
             Err(Rich::custom(
                 *span,
-                format!("Could not find variable {}", variable),
+                format!("Could not find variable {variable}"),
             ))
         }
     } else {
@@ -122,7 +122,7 @@ fn format<'src>(
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
     if let Some(format_str) = args.0.first() {
         if let Expr::Str(s) = &format_str.0 {
-            let mut chars = s.chars().peekable();
+            let mut chars = s.chars();
 
             let mut current_chars = Vec::new();
             let mut current_output = Vec::new();

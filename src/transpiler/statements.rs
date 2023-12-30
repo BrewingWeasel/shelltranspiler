@@ -235,7 +235,7 @@ pub fn transpile_if<'state, 'src: 'state>(
     output.push_str(&new_output);
     output.push_str("; then\n");
     for (var, val, ty) in assignments {
-        output.push_str(&format!("{var}={val}\n"));
+        output.push_str(&format!("eval \"{var}={val}\"\n"));
         state
             .scopes
             .last_mut()

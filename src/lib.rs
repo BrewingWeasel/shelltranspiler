@@ -54,7 +54,11 @@ enum Statement<'src> {
         Spanned<Condition<'src>>,
         Spanned<Vec<Spanned<Statement<'src>>>>,
     ),
-    EnumCreation(&'src str, Vec<(&'src str, Vec<Type>)>),
+    EnumCreation(
+        &'src str,
+        Option<Vec<&'src str>>,
+        Vec<(&'src str, Vec<Type>)>,
+    ),
     If(Spanned<IfStatement<'src>>),
     Return(Spanned<Expr<'src>>),
     Import(Spanned<String>),

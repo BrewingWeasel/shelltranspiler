@@ -97,6 +97,14 @@ pub fn parse_statement<'src>(
         let enum_creation = text::keyword("enum")
             .padded()
             .ignore_then(ident)
+            .then(
+                ident
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .delimited_by(just('<'), just('>'))
+                    .or_not(),
+            )
             .padded()
             .then(
                 ident
@@ -114,7 +122,7 @@ pub fn parse_statement<'src>(
                     .padded()
                     .delimited_by(just('{'), just('}')),
             )
-            .map(|(ident, opts)| Statement::EnumCreation(ident, opts));
+            .map(|((ident, type_vars), opts)| Statement::EnumCreation(ident, type_vars, opts));
 
         let for_loop = text::keyword("for")
             .padded()

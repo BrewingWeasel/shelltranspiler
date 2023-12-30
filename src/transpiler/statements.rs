@@ -207,7 +207,25 @@ done
         }
         Statement::If(if_statement) => transpile_if((&if_statement.0, if_statement.1), state),
         Statement::Empty | Statement::Import(_) => Ok((String::new(), None)),
-        Statement::EnumCreation(ident, options) => {
+        Statement::EnumCreation(ident, generic_vars, options) => {
+            for (_, opt) in options {
+                for ty in opt {
+                    if let Type::Generic(v) = ty {
+                        let Some(generic_types) = generic_vars else {
+                            return Err(Rich::custom(statement.1, format!("Unable to find any generic variable, trying to find generic {v}")))
+                        };
+                        if !generic_types.contains(&v.as_str()) {
+                            return Err(Rich::custom(
+                                statement.1,
+                                format!(
+                                    "Unable to find generic variable {v} but found {:?}",
+                                    generic_types
+                                ),
+                            ));
+                        }
+                    }
+                }
+            }
             state.enums.insert(
                 ident,
                 crate::Enum {

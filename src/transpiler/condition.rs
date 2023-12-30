@@ -158,15 +158,11 @@ fn transpile_match<'src, 'a>(
                             }
                         }
                     }
-                    for i in 0..types.len() {
+                    for (i, matcher) in matching.iter().enumerate() {
                         let (conditions, new_run_before, new_assignments) = transpile_match(
-                            match_statement,
+                            matcher,
                             (
-                                &ExpressionToMatch::EnumVal(
-                                    Box::new(expr.0),
-                                    "", // TODO: real value
-                                    i,
-                                ),
+                                &ExpressionToMatch::EnumVal(Box::new(expr.0), opt_ident, i),
                                 expr.1,
                             ),
                             state,
@@ -177,7 +173,7 @@ fn transpile_match<'src, 'a>(
                     }
 
                     add_option_to_str(&mut run_before, &new_run_before);
-                    checking.push(format!("[ {}_v = {} ]", output, opt_ident))
+                    checking.push(format!("eval \"[ ${}_v = {} ]\"", output, opt_ident))
                 } else {
                     return Err(Rich::custom(
                         expr.1,
@@ -185,6 +181,7 @@ fn transpile_match<'src, 'a>(
                     ));
                 }
             } else {
+                println!("{:?} {:?} {:?}", matching, match_statement, expr);
                 return Err(Rich::custom(
                     expr.1,
                     format!("Expected to find Enum of type {ident}, but found {get_type}"),
@@ -209,7 +206,12 @@ fn transpile_match<'src, 'a>(
             checking.push(new_output);
         }
     }
-    Ok((checking.join(" && "), run_before, assignments))
+    let final_checking = if checking.is_empty() {
+        String::from("true") // TODO: hack
+    } else {
+        checking.join(" && ")
+    };
+    Ok((final_checking, run_before, assignments))
 }
 
 #[cfg(test)]

@@ -147,6 +147,7 @@ enum ContinueIfStatement<'src> {
     Else(Vec<Spanned<Statement<'src>>>),
 }
 
+#[derive(Debug, Clone)]
 enum ExpressionToMatch<'src, 'a> {
     Expr(&'src Expr<'src>),
     EnumVal(Box<&'a ExpressionToMatch<'src, 'a>>, &'src str, usize),
@@ -158,15 +159,14 @@ impl<'src, 'a> ExpressionToMatch<'src, 'a> {
             Self::Expr(e) => e.get_type(state),
             Self::EnumVal(expr, opt, n) => {
                 if let Type::Enum(e) = expr.get_type(state) {
-                    Type::Any // TODO: real type
-                              // state
-                              //     .enums
-                              //     .get(e.as_str())
-                              //     .expect("Enum should exist")
-                              //     .opts
-                              //     .get(opt)
-                              //     .expect("Option should have already been checked")[*n]
-                              //     .to_owned()
+                    state
+                        .enums
+                        .get(e.as_str())
+                        .expect("Enum should exist")
+                        .opts
+                        .get(opt)
+                        .expect("Option should have already been checked")[*n]
+                        .to_owned()
                 } else {
                     unreachable!()
                 }

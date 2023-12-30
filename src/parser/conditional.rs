@@ -84,7 +84,7 @@ pub fn match_creation<'src>(
                         .padded()
                         .delimited_by(just('('), just(')')),
                 )
-                .map(|((ident, opt), vals)| MatchStatement::Enum(dbg!(ident), dbg!(opt), vals)),
+                .map(|((ident, opt), vals)| MatchStatement::Enum(ident, opt, vals)),
             ident().map(MatchStatement::Assignment),
             expression().map(|(v, _span)| MatchStatement::LiteralValue(v)),
         ))

@@ -126,7 +126,7 @@ fn transpile_match<'src>(
     match match_statement {
         MatchStatement::Enum(ident, opt_ident, matching) => {
             let get_type = expr.0.get_type(state);
-            if let Type::Enum(enum_ident) = get_type {
+            if let Type::Enum(enum_ident, _generic_vars) = get_type {
                 if enum_ident != *ident {
                     return Err(Rich::custom(
                         expr.1,

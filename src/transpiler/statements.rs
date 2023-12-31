@@ -234,6 +234,7 @@ done
                         .map(|(opt_ident, opt_types)| (*opt_ident, opt_types.iter().collect()))
                         .collect(),
                     times_called: 0,
+                    generic_vars: generic_vars.clone().unwrap_or_default(),
                 },
             );
             Ok((String::new(), None))
@@ -253,6 +254,7 @@ pub fn transpile_if<'state, 'src: 'state>(
     output.push_str(&new_output);
     output.push_str("; then\n");
     for (var, val, ty) in assignments {
+        println!("eee {ty}");
         output.push_str(&format!("eval \"{var}={val}\"\n"));
         state
             .scopes

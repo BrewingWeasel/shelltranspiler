@@ -29,6 +29,7 @@ struct Kwarg<'src> {
 #[derive(Debug, Clone)]
 struct Enum<'src> {
     opts: HashMap<&'src str, Vec<&'src Type>>,
+    generic_vars: Vec<&'src str>,
     times_called: usize,
 }
 
@@ -66,7 +67,7 @@ enum Statement<'src> {
     Empty,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
 enum Type {
     Str,
     Num,
@@ -74,7 +75,7 @@ enum Type {
     Any,
     None,
     Generic(String),
-    Enum(String),
+    Enum(String, Vec<(String, Type)>),
     List(Box<Type>),
 }
 
@@ -87,7 +88,17 @@ impl Display for Type {
             Self::Any => write!(f, "\x1b[35mundefined\x1b[39m"),
             Self::None => write!(f, "\x1b[35mNone\x1b[39m"),
             Self::Generic(v) => write!(f, "\x1b[35mGeneric variable {v}\x1b[39m"),
-            Self::Enum(v) => write!(f, "\x1b[35mEnum {v}\x1b[39m"),
+            Self::Enum(ident, generics) => {
+                write!(
+                    f,
+                    "\x1b[35m{ident}<{}>\x1b[39m",
+                    generics
+                        .iter()
+                        .map(|(v, ty)| format!("{v}: {ty}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
             Self::List(v) => write!(f, "\x1b[35m[{v}]\x1b[39m"),
         }
     }
@@ -155,7 +166,12 @@ enum ContinueIfStatement<'src> {
 #[derive(Debug, Clone)]
 enum ExpressionToMatch<'src, 'a> {
     Expr(&'src Expr<'src>),
-    EnumVal(Box<&'a ExpressionToMatch<'src, 'a>>, &'src str, usize),
+    EnumVal(
+        Box<&'a ExpressionToMatch<'src, 'a>>,
+        &'src str,
+        usize,
+        // Vec<(&'src str, Type)>,
+    ),
 }
 
 impl<'src, 'a> ExpressionToMatch<'src, 'a> {
@@ -163,15 +179,28 @@ impl<'src, 'a> ExpressionToMatch<'src, 'a> {
         match self {
             Self::Expr(e) => e.get_type(state),
             Self::EnumVal(expr, opt, n) => {
-                if let Type::Enum(e) = expr.get_type(state) {
-                    state
+                if let Type::Enum(e, generic_vars) = expr.get_type(state) {
+                    let direct_type = state
                         .enums
                         .get(e.as_str())
                         .expect("Enum should exist")
                         .opts
                         .get(opt)
                         .expect("Option should have already been checked")[*n]
-                        .to_owned()
+                        .to_owned();
+                    if let Type::Generic(v) = direct_type {
+                        if let Some(t) = generic_vars
+                            .iter()
+                            .find(|(generic_var, _)| generic_var == &v)
+                            .map(|(_, ty)| ty)
+                        {
+                            t.to_owned()
+                        } else {
+                            Type::Any
+                        }
+                    } else {
+                        direct_type
+                    }
                 } else {
                     unreachable!()
                 }
@@ -185,7 +214,12 @@ enum Expr<'src> {
     Num(i64), // TODO: float
     Str(String),
     Bool(bool),
-    Enum(&'src str, &'src str, Spanned<Vec<Spanned<Expr<'src>>>>),
+    Enum(
+        &'src str,
+        Vec<(&'src str, Type)>,
+        &'src str,
+        Spanned<Vec<Spanned<Expr<'src>>>>,
+    ),
     List(Spanned<Vec<Spanned<Expr<'src>>>>),
     ListIndex(&'src str, Box<Spanned<Expr<'src>>>),
     Var(&'src str),
@@ -235,7 +269,38 @@ impl<'src> Expr<'src> {
                 }
                 Type::Any
             }
-            Self::Enum(e, _, _) => Type::Enum((*e).to_string()),
+            Self::Enum(e, types, opt, exprs) => {
+                let mut generic_vars = HashMap::new();
+                if let Some(enum_v) = state.enums.get(e) {
+                    for (ty, expr_type) in enum_v
+                        .opts
+                        .get(opt)
+                        .expect("option should have already been checked")
+                        .iter()
+                        .zip(exprs.0.iter().map(|(expr, _)| expr.get_type(state)))
+                    {
+                        if let Type::Generic(v) = ty {
+                            generic_vars.insert(v.to_owned(), expr_type);
+                        }
+                    }
+                } else {
+                    todo!()
+                }
+                for (v, ty) in types {
+                    generic_vars.insert(v.to_string(), ty.clone());
+                }
+                if generic_vars.len()
+                    != state
+                        .enums
+                        .get(e)
+                        .expect("enum should already have been confirmed to exist")
+                        .generic_vars
+                        .len()
+                {
+                    todo!()
+                }
+                Type::Enum((*e).to_string(), generic_vars.into_iter().collect())
+            }
             Self::CallModule(module, func, (args, _), _) => {
                 if let Some(fun) = state.modules.get(module).and_then(|s| s.get_func(func)) {
                     if let Some(value) = get_fun_return_type(fun, args, state) {

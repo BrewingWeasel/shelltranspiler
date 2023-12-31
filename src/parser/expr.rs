@@ -1,7 +1,7 @@
 use crate::Expr;
 use chumsky::{prelude::*, Parser};
 
-use super::{ParseErr, Spanned};
+use super::{get_type, ParseErr, Spanned};
 
 pub fn expression<'src>(
 ) -> impl Parser<'src, &'src str, Spanned<Expr<'src>>, ParseErr<'src>> + Clone {
@@ -32,10 +32,24 @@ pub fn expression<'src>(
             .padded();
 
         let enum_expr = ident
+            .then(
+                ident
+                    .then_ignore(just(':'))
+                    .padded()
+                    .then(get_type())
+                    .separated_by(just(','))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .padded()
+                    .delimited_by(just('<'), just('>'))
+                    .or_not(),
+            )
             .then_ignore(just("::"))
             .then(ident)
             .then(arguments.clone().delimited_by(just('('), just(')')))
-            .map(|((enum_name, enum_opt), exprs)| Expr::Enum(enum_name, enum_opt, exprs));
+            .map(|(((enum_name, generic_vars), enum_opt), exprs)| {
+                Expr::Enum(enum_name, generic_vars.unwrap_or_default(), enum_opt, exprs)
+            });
 
         let var = ident.map(Expr::Var);
 

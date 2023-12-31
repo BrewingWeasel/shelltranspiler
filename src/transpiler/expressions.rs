@@ -21,7 +21,7 @@ pub fn transpile_expr<'src>(
             },
             None,
         )),
-        Expr::Enum(ident, opt_ident, elements) => {
+        Expr::Enum(ident, _generic_vars, opt_ident, elements) => {
             let mut run_before = String::new();
             if let Some(real_enum) = state.enums.get(ident) {
                 let variable_template = format!("{ident}_vals_{}", real_enum.times_called);

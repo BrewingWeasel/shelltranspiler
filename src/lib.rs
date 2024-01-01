@@ -327,6 +327,13 @@ impl<'src> Expr<'src> {
                     if let Some(value) = get_fun_return_type(fun, args, state) {
                         return Ok(value);
                     }
+                } else if state.name == *module {
+                    if let Some(fun) = state.get_func(func) {
+                        if let Some(value) = get_fun_return_type(fun, args, state) {
+                            return Ok(value);
+                        }
+                    }
+                    return Err(format!("{func} has no return value"));
                 }
                 Err(format!("Unable to find module or function {module}.{func}"))
             }

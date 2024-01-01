@@ -52,3 +52,8 @@ fun input(prompt: string) -> string {
   @eval("read", "-p", prompt, "__readvar")
   return @eval("$__readvar")
 }
+
+fun panic(message: string | error_code=1) {
+  @print("program panicked with message {}", message)
+  @eval("exit", error_code)
+}

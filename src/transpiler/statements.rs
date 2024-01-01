@@ -1,4 +1,6 @@
-use crate::{parser::Spanned, ContinueIfStatement, Expr, IfStatement, State, Statement, Type};
+use crate::{
+    parser::Spanned, ContinueIfStatement, Expr, IfStatement, State, Statement, ToRich, Type,
+};
 use chumsky::prelude::Rich;
 
 use super::{
@@ -157,7 +159,9 @@ done
             }
         }
         Statement::For(var, loop_name, body) => {
-            if let Type::List(looped_item_type) = loop_name.0.get_type(state) {
+            if let Type::List(looped_item_type) =
+                loop_name.0.get_type(state).to_rich(loop_name.1)?
+            {
                 let (list_refr, run_before) = transpile_repr((&loop_name.0, loop_name.1), state)?;
                 let list_refr = list_refr.trim_matches(['$', '"']);
                 let index_value = state.new_for_loop_index();
@@ -254,7 +258,6 @@ pub fn transpile_if<'state, 'src: 'state>(
     output.push_str(&new_output);
     output.push_str("; then\n");
     for (var, val, ty) in assignments {
-        println!("eee {ty}");
         output.push_str(&format!("eval \"{var}={val}\"\n"));
         state
             .scopes
@@ -320,7 +323,7 @@ pub fn assignment<'state, 'src: 'state>(
     assignment_type: AssignmentType,
     state: &mut State<'state>,
 ) -> Result<(String, Option<String>), Rich<'src, char>> {
-    let expr_type = &value.0.get_type(state);
+    let expr_type = &value.0.get_type(state).to_rich(value.1)?;
     if let Some(attempted_type) = var_type {
         if !attempted_type.matches(expr_type) {
             return Err(Rich::custom(

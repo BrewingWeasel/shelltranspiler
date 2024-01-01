@@ -1,6 +1,6 @@
 use crate::parser::parser;
 use ariadne::{sources, Color, Label, Report, ReportKind};
-use chumsky::{prelude::Rich, Parser};
+use chumsky::{prelude::Rich, span::SimpleSpan, Parser};
 use parser::Spanned;
 use std::{borrow::Cow, collections::HashMap, fmt::Display, path::PathBuf, process::exit};
 use transpiler::transpile_from_ast;
@@ -175,11 +175,11 @@ enum ExpressionToMatch<'src, 'a> {
 }
 
 impl<'src, 'a> ExpressionToMatch<'src, 'a> {
-    fn get_type(&self, state: &mut State) -> Type {
+    fn get_type(&self, state: &mut State) -> Result<Type, String> {
         match self {
             Self::Expr(e) => e.get_type(state),
             Self::EnumVal(expr, opt, n) => {
-                if let Type::Enum(e, generic_vars) = expr.get_type(state) {
+                if let Type::Enum(e, generic_vars) = expr.get_type(state)? {
                     let direct_type = state
                         .enums
                         .get(e.as_str())
@@ -194,18 +194,28 @@ impl<'src, 'a> ExpressionToMatch<'src, 'a> {
                             .find(|(generic_var, _)| generic_var == &v)
                             .map(|(_, ty)| ty)
                         {
-                            t.to_owned()
+                            Ok(t.to_owned())
                         } else {
-                            Type::Any
+                            Err(format!("Unable to get type of generic {v}"))
                         }
                     } else {
-                        direct_type
+                        Ok(direct_type)
                     }
                 } else {
                     unreachable!()
                 }
             }
         }
+    }
+}
+
+trait ToRich<'src, T> {
+    fn to_rich(self, span: SimpleSpan) -> Result<T, Rich<'src, char>>;
+}
+
+impl<'src> ToRich<'src, Type> for Result<Type, String> {
+    fn to_rich(self, span: SimpleSpan) -> Result<Type, Rich<'src, char>> {
+        self.map_err(|e| Rich::custom(span, e))
     }
 }
 
@@ -244,30 +254,37 @@ enum Expr<'src> {
 }
 
 impl<'src> Expr<'src> {
-    fn get_type(&self, state: &'src State<'src>) -> Type {
+    fn get_type(&self, state: &'src State<'src>) -> Result<Type, String> {
         match self {
-            Self::Num(_) => Type::Num,
-            Self::Str(_) => Type::Str,
-            Self::Bool(_) => Type::Bool,
-            Self::List(v) => Type::List(
-                v.0.first()
-                    .map_or(Box::new(Type::Any), |v| Box::new(v.0.get_type(state))),
-            ),
-            Self::ListIndex(name, _index) => state.get_var(name).map_or(Type::Any, |v| {
-                if let Type::List(t) = &v.1 {
-                    *t.clone()
+            Self::Num(_) => Ok(Type::Num),
+            Self::Str(_) => Ok(Type::Str),
+            Self::Bool(_) => Ok(Type::Bool),
+            Self::List(v) => {
+                if let Some(elem) = v.0.first() {
+                    Ok(Type::List(Box::new(elem.0.get_type(state)?)))
                 } else {
-                    Type::Any
+                    Ok(Type::List(Box::new(Type::Any))) // TODO: some sort of error if it cant be inferred
+                }
+            }
+            Self::ListIndex(name, _index) => state.get_var(name).map_or(Ok(Type::Any), |v| {
+                if let Type::List(t) = &v.1 {
+                    Ok(*t.clone())
+                } else {
+                    Ok(Type::Any)
                 }
             }),
-            Self::Var(v) => state.get_var(v).map_or(Type::Any, |var| var.1.clone()),
+            Self::Var(v) => state
+                .get_var(v)
+                .map_or(Err(format!("variable {v} does not exist")), |var| {
+                    Ok(var.1.clone())
+                }),
             Self::Call(func, (args, _), _) => {
                 if let Some(fun) = state.get_func(func) {
                     if let Some(value) = get_fun_return_type(fun, args, state) {
-                        return value;
+                        return Ok(value);
                     }
                 }
-                Type::Any
+                Err(format!("{func} has no return value"))
             }
             Self::Enum(e, types, opt, exprs) => {
                 let mut generic_vars = HashMap::new();
@@ -280,47 +297,48 @@ impl<'src> Expr<'src> {
                         .zip(exprs.0.iter().map(|(expr, _)| expr.get_type(state)))
                     {
                         if let Type::Generic(v) = ty {
-                            generic_vars.insert(v.to_owned(), expr_type);
+                            generic_vars.insert(v.to_owned(), expr_type?);
                         }
                     }
                 } else {
-                    todo!()
+                    return Err(format!("Unable to find enum {e}"));
                 }
                 for (v, ty) in types {
                     generic_vars.insert(v.to_string(), ty.clone());
                 }
-                if generic_vars.len()
-                    != state
-                        .enums
-                        .get(e)
-                        .expect("enum should already have been confirmed to exist")
-                        .generic_vars
-                        .len()
-                {
-                    todo!()
+
+                let expected_vars_len = state
+                    .enums
+                    .get(e)
+                    .expect("enum should already have been confirmed to exist")
+                    .generic_vars
+                    .len();
+
+                if generic_vars.len() != expected_vars_len {
+                    return Err(format!("Expected {expected_vars_len} generic variables"));
                 }
-                Type::Enum((*e).to_string(), generic_vars.into_iter().collect())
+                Ok(Type::Enum(
+                    (*e).to_string(),
+                    generic_vars.into_iter().collect(),
+                ))
             }
             Self::CallModule(module, func, (args, _), _) => {
                 if let Some(fun) = state.modules.get(module).and_then(|s| s.get_func(func)) {
                     if let Some(value) = get_fun_return_type(fun, args, state) {
-                        return value;
+                        return Ok(value);
                     }
                 }
-                Type::Any
+                Err(format!("Unable to find module or function {module}.{func}"))
             }
             Self::Macro(m, _) => match *m {
-                "eval" => Type::None,
-                "print" => Type::None,
-                "format" => Type::Str,
-                "raw_name" => Type::Str,
-                "unsafe_into" => Type::Any,
-                "stdout" => Type::Str,
-                "is_successful_exit" => Type::Bool,
-                v => {
-                    eprintln!("{v}");
-                    unimplemented!()
-                }
+                "eval" => Ok(Type::None),
+                "print" => Ok(Type::None),
+                "format" => Ok(Type::Str),
+                "raw_name" => Ok(Type::Str),
+                "unsafe_into" => Ok(Type::Any),
+                "stdout" => Ok(Type::Str),
+                "is_successful_exit" => Ok(Type::Bool),
+                v => Err(format!("No macro {v} found")),
             },
             Self::Pipe(_, expr) | Self::Operation(_, expr, _) => expr.0.get_type(state),
         }
@@ -342,7 +360,7 @@ fn get_fun_return_type(
                         if generic_v == real_generic_v {
                             return Some(Some(get_generic_by_path(
                                 &path_to_generic,
-                                attempted_arg.get_type(state),
+                                attempted_arg.get_type(state).ok()?,
                             )));
                         }
                     }

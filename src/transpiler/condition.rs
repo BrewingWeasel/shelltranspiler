@@ -1,6 +1,6 @@
 use crate::{
     parser::Spanned, utils::add_option_to_str, Condition, ExpressionToMatch, MatchStatement, State,
-    Type,
+    ToRich, Type,
 };
 use chumsky::prelude::Rich;
 
@@ -12,7 +12,7 @@ pub fn transpile_condition<'src>(
 ) -> Result<(String, Option<String>, Vec<(String, String, Type)>), Rich<'src, char>> {
     match condition.0 {
         Condition::Expression(expr) => {
-            let get_type = expr.0.get_type(state);
+            let get_type = expr.0.get_type(state).to_rich(expr.1)?;
             if get_type != Type::Bool {
                 return Err(Rich::custom(
                     condition.1,
@@ -125,7 +125,7 @@ fn transpile_match<'src>(
 
     match match_statement {
         MatchStatement::Enum(ident, opt_ident, matching) => {
-            let get_type = expr.0.get_type(state);
+            let get_type = expr.0.get_type(state).to_rich(expr.1)?;
             if let Type::Enum(enum_ident, _generic_vars) = get_type {
                 if enum_ident != *ident {
                     return Err(Rich::custom(
@@ -150,7 +150,11 @@ fn transpile_match<'src>(
                     }
                     for (matcher, opt_type) in matching.iter().zip(types.iter()) {
                         if let MatchStatement::LiteralValue(testing_expr) = matcher {
-                            if !testing_expr.get_type(state).matches(opt_type) {
+                            if !testing_expr
+                                .get_type(state)
+                                .to_rich(expr.1)?
+                                .matches(opt_type)
+                            {
                                 return Err(Rich::custom(
                                     expr.1,
                                     format!("Expecting type {opt_type}"),
@@ -190,7 +194,11 @@ fn transpile_match<'src>(
         }
         MatchStatement::Assignment(var) => {
             add_option_to_str(&mut run_before, &new_run_before);
-            assignments = vec![((*var).to_string(), output, expr.0.get_type(state))];
+            assignments = vec![(
+                (*var).to_string(),
+                output,
+                expr.0.get_type(state).to_rich(expr.1)?,
+            )];
         }
         MatchStatement::LiteralValue(val) => {
             let (second_output, second_run_before) = transpile_expr((&val, expr.1), state)?;

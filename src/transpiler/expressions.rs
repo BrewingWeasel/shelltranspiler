@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{get_generic_by_path, macros::transpile_macro, parser::Spanned, Expr, State, Type};
+use crate::{
+    get_generic_by_path, macros::transpile_macro, parser::Spanned, Expr, State, ToRich, Type,
+};
 use chumsky::{
     prelude::Rich,
     span::{SimpleSpan, Span},
@@ -31,7 +33,7 @@ pub fn transpile_expr<'src>(
                     }
 
                     for (goal_type, elem) in actual_types.iter().zip(elements.0.iter()) {
-                        let attempted_type = &elem.0.get_type(state);
+                        let attempted_type = &elem.0.get_type(state).to_rich(elem.1)?;
                         if !attempted_type.matches(goal_type) {
                             return Err(Rich::custom(
                                 expr.1,
@@ -83,7 +85,7 @@ pub fn transpile_expr<'src>(
         Expr::ListIndex(list, index) => {
             let (output, run_before) = transpile_expr((&index.0, index.1), state)?;
             if let Some((sh_variable_name, _type)) = state.get_var(list) {
-                let actual_type = index.0.get_type(state);
+                let actual_type = index.0.get_type(state).to_rich(index.1)?;
                 if actual_type != Type::Num {
                     return Err(Rich::custom(
                         index.1,
@@ -210,8 +212,8 @@ fn run_operation<'a>(
     operations: HashMap<Type, &str>,
     state: &mut State,
 ) -> Result<(String, Option<String>), Rich<'a, char>> {
-    let type1 = first.0.get_type(state);
-    let type2 = second.0.get_type(state);
+    let type1 = first.0.get_type(state).to_rich(first.1)?;
+    let type2 = second.0.get_type(state).to_rich(second.1)?;
     if !type1.matches(&type2) {
         return Err(Rich::custom(
             first.1.union(second.1),
@@ -309,7 +311,7 @@ fn call_function<'a>(
         for real_kwarg in &func.kwargs {
             if &real_kwarg.ident == kwarg_ident {
                 if let Some(expected_type) = &real_kwarg.kwarg_type {
-                    let other_type = &expr.get_type(mini_state);
+                    let other_type = &expr.get_type(mini_state).to_rich(*span)?;
                     if !expected_type.matches(other_type) {
                         return Err(Rich::custom(
                             *span,
@@ -330,7 +332,7 @@ fn call_function<'a>(
     }
     for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(func.args.iter()) {
         if let Some(arg_type) = possible_arg_type {
-            let attempted_type = &arg.get_type(mini_state);
+            let attempted_type = &arg.get_type(mini_state).to_rich(*span)?;
             if !attempted_type.matches(arg_type) {
                 return Err(Rich::custom(
                     *span,

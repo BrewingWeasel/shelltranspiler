@@ -17,3 +17,67 @@ pub fun cursor_right(i: int) {
 pub fun cursor_to_coords(x: int, y: int) {
   @print("\033[{};{}H", x, y)
 }
+
+pub fun red(inp: string) -> string {
+  return "\033[31m" + inp
+}
+
+pub fun green(inp: string) -> string {
+  return "\033[32m" + inp
+}
+
+pub fun green_background(inp: string) -> string {
+  return "\033[42m" + inp
+}
+
+pub fun yellow(inp: string) -> string {
+  return "\033[33m" + inp
+}
+
+pub fun yellow_background(inp: string) -> string {
+  return "\033[34m" + inp
+}
+
+pub fun blue(inp: string) -> string {
+  return "\033[34m" + inp
+}
+
+pub fun blue_background(inp: string) -> string {
+  return "\033[44m" + inp
+}
+
+pub fun magenta(inp: string) -> string {
+  return "\033[35m" + inp
+}
+
+pub fun magenta_background(inp: string) -> string {
+  return "\033[45m" + inp
+}
+
+pub fun cyan(inp: string) -> string {
+  return "\033[36m" + inp
+}
+
+pub fun cyan_background(inp: string) -> string {
+  return "\033[46m" + inp
+}
+
+pub fun white(inp: string) -> string {
+  return "\033[37m" + inp
+}
+
+pub fun white_background(inp: string) -> string {
+  return "\033[47m" + inp
+}
+
+pub fun default(inp: string) -> string {
+  return "\033[39m" + inp
+}
+
+pub fun default_background(inp: string) -> string {
+  return "\033[49m" + inp
+}
+
+pub fun reset(inp: string) -> string {
+  return "\033[0m" + inp
+}

@@ -277,18 +277,11 @@ fn call_function<'a>(
         Ok(())
     };
 
-    let mini_state: &mut State = if let Some(mod_loc) = module {
-        state
-            .modules
-            .get_mut(mod_loc)
-            .expect("already checked for module def")
-    } else {
-        state
-    };
+    if let Some(mod_loc) = module {
+        state.modules_in_scope.push(mod_loc.to_owned());
+    }
 
-    let func = mini_state
-        .get_func(f)
-        .expect("already tried to get function");
+    let func = state.get_func(f).expect("already tried to get function");
 
     if args.len() != func.args.len() {
         let span = match args.len() {
@@ -311,7 +304,7 @@ fn call_function<'a>(
         for real_kwarg in &func.kwargs {
             if &real_kwarg.ident == kwarg_ident {
                 if let Some(expected_type) = &real_kwarg.kwarg_type {
-                    let other_type = &expr.get_type(mini_state).to_rich(*span)?;
+                    let other_type = &expr.get_type(state).to_rich(*span)?;
                     if !expected_type.matches(other_type) {
                         return Err(Rich::custom(
                             *span,
@@ -332,7 +325,7 @@ fn call_function<'a>(
     }
     for ((arg, span), (arg_name, possible_arg_type)) in args.iter().zip(func.args.iter()) {
         if let Some(arg_type) = possible_arg_type {
-            let attempted_type = &arg.get_type(mini_state).to_rich(*span)?;
+            let attempted_type = &arg.get_type(state).to_rich(*span)?;
             if !attempted_type.matches(arg_type) {
                 return Err(Rich::custom(
                     *span,
@@ -342,10 +335,10 @@ fn call_function<'a>(
             check_used_generic(arg_type, attempted_type, &mut generic_types_map, span)?;
         }
     }
-    let mut function_call_output = format!("{}_{f}", mini_state.name);
+    let mut function_call_output = format!("{}_{f}", state.get_name());
     function_call_output.push(' ');
-    function_call_output.push_str(&mini_state.get_times_called(f));
-    mini_state.call_func(f);
+    function_call_output.push_str(&state.get_times_called(f));
+    state.call_func(f);
     for (kwarg, (expr, span)) in kwargs {
         function_call_output.push_str(&format!(" --{kwarg} "));
         let (normal_expr, run_before) = transpile_expr((expr, *span), state)?;
@@ -365,6 +358,9 @@ fn call_function<'a>(
         function_call_output.push_str(&normal_expr);
     }
     output.push_str(&function_call_output);
+    if module.is_some() {
+        state.modules_in_scope.pop();
+    }
     Ok(output)
 }
 

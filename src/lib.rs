@@ -402,6 +402,7 @@ struct State<'src> {
     list_num: usize,
     times_ran_for_loop: usize,
     temp_vars_used: usize,
+    modules_in_scope: Vec<String>,
     enums: HashMap<&'src str, Enum<'src>>,
     modules: HashMap<&'src str, Box<State<'src>>>,
 }
@@ -414,6 +415,7 @@ impl<'src> State<'src> {
             list_num: 0,
             times_ran_for_loop: 0,
             temp_vars_used: 0,
+            modules_in_scope: Vec::new(),
             enums: HashMap::new(),
             modules: HashMap::new(),
         }
@@ -437,6 +439,16 @@ impl<'src> State<'src> {
     }
 
     fn get_func(&self, function: &str) -> Option<&Function> {
+        for mod_name in &self.modules_in_scope {
+            if let Some(f) = self
+                .modules
+                .get(mod_name.as_str())
+                .expect("Mod name should have been checked when creating")
+                .get_func(function)
+            {
+                return Some(f);
+            }
+        }
         for scope in self.scopes.iter().rev() {
             if let Some(real_var) = scope.functions.get(function) {
                 return Some(real_var);
@@ -446,6 +458,12 @@ impl<'src> State<'src> {
     }
 
     fn call_func(&mut self, function: &str) {
+        for mod_name in &self.modules_in_scope {
+            self.modules
+                .get_mut(mod_name.as_str())
+                .expect("Mod name should have been checked when creating")
+                .call_func(function);
+        }
         for scope in self.scopes.iter_mut().rev() {
             if let Some(real_var) = scope.functions.get_mut(function) {
                 real_var.times_called += 1;
@@ -474,6 +492,12 @@ impl<'src> State<'src> {
             .get_mut(ident)
             .expect("Already ensured that enum exists")
             .times_called += 1;
+    }
+
+    fn get_name(&self) -> String {
+        self.modules_in_scope
+            .last()
+            .map_or_else(|| self.name.to_owned(), |v| (*v).to_owned())
     }
 }
 
@@ -534,6 +558,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                 if let Statement::Import(module) = &statement.0 {
                     let src = match module.0.as_str() {
                         "term" => Cow::Borrowed(include_str!("../lib/term.shh")),
+                        "logging" => Cow::Borrowed(include_str!("../lib/logging.shh")),
                         user_module => {
                             if let Ok(src) = std::fs::read_to_string(user_module) {
                                 Cow::Owned(src)
@@ -567,6 +592,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                 let mut mini_state = State {
                     name: mod_name,
                     scopes: vec![Scope::new("module", None)],
+                    modules_in_scope: Vec::new(),
                     list_num: state.list_num,
                     times_ran_for_loop: state.times_ran_for_loop,
                     temp_vars_used: state.temp_vars_used,

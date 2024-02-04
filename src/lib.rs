@@ -558,7 +558,7 @@ pub fn transpile_from_file(filename: &PathBuf) -> Option<String> {
                 if let Statement::Import(module) = &statement.0 {
                     let src = match module.0.as_str() {
                         "term" => Cow::Borrowed(include_str!("../lib/term.shh")),
-                        "logging" => Cow::Borrowed(include_str!("../lib/logging.shh")),
+                        // "logging" => Cow::Borrowed(include_str!("../lib/logging.shh")),
                         user_module => {
                             if let Ok(src) = std::fs::read_to_string(user_module) {
                                 Cow::Owned(src)
